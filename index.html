@@ -1,0 +1,338 @@
+<!doctype html>
+<meta charset="UTF-8">
+<html>
+<head>
+<title>Lunar Miner</title>
+</head>
+<body onload="main()">
+<script>
+
+var config = {
+    crit_fuel       = 2,
+    low_fuel        = 10,
+    max_fuel        = 100,
+    button_border   = 5,
+    gauge_border    = 3,
+    color_fuel      = "#10d040",
+    color_gauge_bg  = "#e0e0e0",
+    color_land      = "#707070",
+    color_ore       = "#c000c0",
+};
+
+class Color {
+    constructor(hex) {
+        this.hex_str = hex;
+    }
+    hex() {
+        return this.hex_str;
+    }
+    jstring() {
+        return "#" + this.hex_str;
+    }
+    get_comp(comp) {
+        return parseInt(this.hex_str.substr(comp*2, 2), 16);
+    }
+    adj(comp, incr) {
+        let val = this.get_comp(comp) + incr;
+        if (val < 0) val = 0;
+        if (val > 255) val = 255;
+        const ci = comp*2;
+        return new Color(this.hex_str.substr(0,ci) + hex2(val) + this.hex_str.substr(ci+2));
+    }
+    darker(mult) {
+        return new Color(hex2(this.get_comp(0)*mult) + hex2(this.get_comp(1)*mult) + hex2(this.get_comp(2)*mult));
+    }
+    opposite() {
+        return new Color(hex2(255-this.get_comp(0)) + hex2(255-this.get_comp(1)) + hex2(255-this.get_comp(2)));
+    }
+    contrast() {
+        const bright = this.get_comp(0) + this.get_comp(1) + this.get_comp(2);
+        return new Color((bright > (3*128)) ? "000000" : "ffffff");
+    }
+};
+
+class Geom {
+    constructor() {
+    }
+}; // class Geom
+
+class Drawing {
+    constructor(ctx) {
+        this.ctx = ctx;
+    }
+    function draw_rect(x, y, w, h, color) {
+        if (color != undefined) this.ctx.fillStyle = color.jstring();
+        this.ctx.fillRect(x, y, w, h);
+    }
+    draw_centered_rect(cx, cy, w, h, color) {
+        this.draw_rect(cx - w/2, cy - h/2, w, h, color);
+    }
+    draw_outline(x, y, w, h, xb, yb, color) {
+        this.draw_rect(x,      y,       w-xb,   yb,   color);
+        this.draw_rect(x+w-xb, y,       xb,     h-yb, color);
+        this.draw_rect(x+xb,   y+h-yb,  w-xb,   yb,   color);
+        this.draw_rect(x,      y+yb,    xb,     h-yb, color);
+    }
+    draw_centered_outline(cx, cy, w, h, xb, yb, color) {
+        this.draw_outline(cx - w/2, cy - h/2, w, h, xb, yb, color);
+    }
+    draw_circle(x, y, r, color) {
+        this.ctx.beginPath();
+        this.ctx.fillStyle = color.jstring();
+        this.ctx.arc(x, y, r, 0, 2*Math.PI);
+        this.ctx.fill();
+    }
+    draw_text(x, y, text) {
+        ctx.fillText(text, x, y);
+    }
+    draw_centered_text(x, y, w, text) {
+        const text_size = ctx.measureText(text);
+        const nx = x + (w - text_size.width) / 2;
+        if (nx > x) x = nx;
+        draw_text(x, y, text);
+        return { width: text_size.width, height: text_size.width*1.6 };
+    }
+}; // class Drawing
+
+class UserInput {
+    constructor() {
+    }
+    getkey() {
+    }
+}; // class UserInput
+
+class DashClock {
+    constructor() {
+    }
+}; // class DashClock
+
+class Gauge {
+    constructor(title, color, max_value, low_value, crit_value) {
+        this.title = title;
+        this.color = color;
+        this.max_value = max_value;
+        this.low_value = low_value;
+        this.crit_value = crit_value;
+        this.value = 0;
+    }
+    set_value(value) {
+        value = Math.min(value, this.max_value);
+        this.value = value;
+    }
+    get_value(value) {
+        return this.value;
+    }
+    draw(drawing, x, y, w, h) {
+        let title_size = draw_centered_text(x, y, w, this.title);
+        const gh = h - title_size.height;
+        const gb = config.gauge_border;
+        const inh = gh - 2*gb;
+        const inw = w - 2*gb;
+        const barh = inh * this.value / this.max_value;
+        drawing.draw_outline(x, y+title_size.height, w, gh, gb, gb, config.color_gauge_bg);
+        drawing.draw_rect(x+gb, y+h-gb-barh, inw, barh);
+    }
+}; // class Gauge
+
+class FuelGauge extends Gauge {
+    constructor() {
+        super("Fuel", config.fuel_color, config.max_fuel, config.low_fuel, config.crit_fuel);
+    }
+}; // class FuelGauge
+
+class OreGauge extends Gauge {
+    constructor(ship) {
+        const max_cargo = ship.max_cargo();
+        super("Cargo", config.ore_color, max_cargo, 0, 0);
+    }
+}; // class OreGauge
+
+class AltGauge extends Gauge {
+    constructor() {
+        super("Alt", config.land_color, config.max_alt, 0, 0);
+    }
+}; // class AltGauge 
+
+class Button {
+    constructor(title, on_color, off_color, click_handler) {
+        this.title = title;
+        this.on = false;
+        this.on_color = on_color;
+        this.off_color = off_color;
+        this.click_handler = click_handler;
+    }
+    set_on(on) {
+        this.on = on;
+    }
+    draw(drawing, x, y, w, h) {
+        let bb = config.button_border;
+        drawing.draw_outline(x, y, w, h, bb, bb, this.on ? this.on_color : this.off_color);
+        let cy = y + h/2; // FIXME
+        draw_centered_text(x, cy, w, this.title);
+    }
+    click() {
+        this.click_handler();
+    }
+}; // class Button
+
+class Menu {
+    constructor() {
+    }
+}; // class Menu
+
+class PortMenu {
+    constructor() {
+    }
+}; // class PortMenu
+
+class StoreMenu {
+    constructor() {
+    }
+}; // class StoreMenu
+
+class ScoopButton extends Button {
+    constructor() {
+    }
+}; // class ScoopButton
+
+class LSIButton extends Button {
+    constructor() {
+    }
+}; // class LSIButton
+
+class OreDetectorButton {
+    constructor() {
+    }
+}; // class OreDetectorButton
+
+class PortMapButton {
+    constructor() {
+    }
+}; // class PortMapButton
+
+class LiveStatusButton {
+    constructor() {
+    }
+}; // class LiveStatusButton
+
+class ResourceMap {
+    constructor() {
+    }
+}; // class ResourceMap
+
+class OreDetector extends ResourceMap {
+    constructor() {
+    }
+}; // class OreDetector
+
+class PortMap extends ResourceMap {
+    constructor() {
+    }
+}; // class PortMap
+
+class LiveStatus {
+    constructor() {
+    }
+}; // class LiveStatus
+
+class LiveView {
+    constructor() {
+    }
+}; // class LiveView
+
+class Landscape {
+    constructor() {
+    }
+}; // class Landscape
+
+class OreChunk {
+    constructor() {
+    }
+}; // class OreChunk
+
+class Port {
+    constructor() {
+    }
+}; // class Port
+
+class Billboard {
+    constructor() {
+    }
+}; // class Billboard
+
+class Account {
+    constructor() {
+    }
+}; // class Account
+
+class Loan {
+    constructor() {
+    }
+}; // class Loan
+
+class MassiveObject {
+    constructor() {
+    }
+}; // class MassiveObject
+
+class Ship {
+    constructor() {
+    }
+}; // class Ship
+
+class User {
+    constructor() {
+    }
+}; // class User
+
+//---main
+
+var user = null;
+
+function main() {
+    const params = new URLSearchParams(window.location.search);
+    const canvas = el("drawing");
+    user.drawing = new Drawing(canvas.getContext("2d"));
+    user.ship = new Ship();
+}
+
+//---draw
+
+function get_ctx(id) {
+    return document.getElementById(id).getContext("2d");
+    }
+
+function draw_rect(ctx, x, y, w, h, color) {
+    if (color != undefined) ctx.fillStyle = color.jstring();
+    ctx.fillRect(x, y, w, h);
+    }
+
+function draw_centered_rect(ctx, cx, cy, w, h, color) {
+    draw_rect(ctx, cx - w/2, cy - h/2, w, h, color);
+    }
+
+function draw_outline(ctx, x, y, w, h, xb, yb, color) {
+    draw_rect(ctx, x,      y,       w-xb,   yb,   color);
+    draw_rect(ctx, x+w-xb, y,       xb,     h-yb, color);
+    draw_rect(ctx, x+xb,   y+h-yb,  w-xb,   yb,   color);
+    draw_rect(ctx, x,      y+yb,    xb,     h-yb, color);
+}
+
+function draw_centered_outline(ctx, cx, cy, w, h, xb, yb, color) {
+    draw_outline(ctx, cx - w/2, cy - h/2, w, h, xb, yb, color);
+    }
+
+function draw_circle(ctx, x, y, r, color) {
+    ctx.beginPath();
+    ctx.fillStyle = color.jstring();
+    ctx.arc(x, y, r, 0, 2*Math.PI);
+    ctx.fill();
+    }
+
+function el(name) {
+    return document.getElementById(name);
+    }
+
+</script>
+</body>
+</html>
