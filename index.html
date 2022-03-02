@@ -5,6 +5,7 @@
 <title>Lunar Miner</title>
 </head>
 <body onload="main()">
+<canvas id="canvas" width="1" height="1"></canvas>
 <script>
 
 var config = {
@@ -16,13 +17,19 @@ var config = {
     view_width_m           : 1500,
     low_fuel               : 10,
     max_fuel               : 100,
-    ship_thrust            : 10,
+    ship_bot_thrust        : 10,
+    ship_mass              : 50,
+    ship_max_cargo         : 500,
 
-    color_fuel             : "#10d040",
-    color_gauge_bg         : "#e0e0e0",
-    color_land             : "#707070",
-    color_ore              : "#c000c0",
-    color_ship             : "#10ffff",
+    color_btn_text         : new Color("ffffff"),
+    color_fuel             : new Color("10d040"),
+    color_gauge_bg         : new Color("e0e0e0"),
+    color_gauge_text       : new Color("000000"),
+    color_land             : new Color("707070"),
+    color_ore              : new Color("c000c0"),
+    color_sky              : new Color("000000"),
+    color_ship             : new Color("10ffff"),
+    color_thrust           : new Color("ff3010"),
 };
 
 // --------------------------------------------------------------------
@@ -59,13 +66,25 @@ class Color {
 };
 
 // --------------------------------------------------------------------
-class Geom {
-    constructor() {
+class Vector {
+    constructor(x,y) {
+        this.x = x;
+        this.y = y;
+    }
+    add(v) {
+        this.x += v.x;
+        this.y += v.y;
+    }
+    mul(num) {
+        return new Vector(this.x*num, this.y*num);
+    }
+    norm2() {
+        return this.x*this.x + this.y*this.y;
     }
 }; // class Geom
 
 // --------------------------------------------------------------------
-class Drawing {
+class Graphics {
     constructor(ctx) {
         this.ctx = ctx;
     }
@@ -106,7 +125,7 @@ class Drawing {
         draw_text(x, y, text, color);
         return text_size;
     }
-}; // class Drawing
+}; // class Graphics
 
 // --------------------------------------------------------------------
 class UserInput {
@@ -143,7 +162,7 @@ class Gauge {
     get_value(value) {
         return this.value;
     }
-    draw(drawing) {
+    draw(gfx) {
         let title_size = draw_centered_text(this.x, this.y, this.w, this.title);
         const gh = this.h - title_size.height;
         const gb = config.gauge_border;
@@ -152,10 +171,10 @@ class Gauge {
         const barh = inh * this.value / this.max_value;
         const bot = this.y + this.h;
         const value_text = this.value.toString();
-        const value_text_size = drawing.measure_text(value_text);
-        drawing.draw_outline(this.x, this.y+title_size.height, this.w, gh, gb, gb, config.color_gauge_bg);
-        drawing.draw_rect(this.x+gb, bot-gb-barh, inw, barh, this.color);
-        drawing.draw_centered_text(this.x, bot-value_text_size.h, this.w, value_text, color.opposite());
+        const value_text_size = gfx.measure_text(value_text);
+        gfx.draw_outline(this.x, this.y+title_size.height, this.w, gh, gb, gb, config.color_gauge_bg);
+        gfx.draw_rect(this.x+gb, bot-gb-barh, inw, barh, this.color);
+        gfx.draw_centered_text(this.x, bot-value_text_size.h, this.w, value_text, config.color_gauge_text);
     }
 }; // class Gauge
 
@@ -169,8 +188,7 @@ class FuelGauge extends Gauge {
 // --------------------------------------------------------------------
 class OreGauge extends Gauge {
     constructor(x, y, w, h) {
-        const max_cargo = ???ship.max_cargo();
-        super("Cargo", x, y, w, h, config.ore_color, max_cargo, 0, 0);
+        super("Cargo", x, y, w, h, config.ore_color, ship.max_cargo, 0, 0);
     }
 }; // class OreGauge
 
@@ -183,8 +201,9 @@ class AltGauge extends Gauge {
 
 // --------------------------------------------------------------------
 class Button {
-    constructor(title, x, y, w, h, on_color, off_color, click_handler) {
-        this.title = title;
+    constructor(on_title, off_title, x, y, w, h, on_color, off_color, click_handler) {
+        this.on_title = on_title;
+        this.off_title = off_title;
         this.on = false;
         this.on_color = on_color;
         this.off_color = off_color;
@@ -193,12 +212,13 @@ class Button {
     set_on(on) {
         this.on = on;
     }
-    draw(drawing) {
+    draw(gfx) {
         let bb = config.button_border;
         const bg_color = this.on ? this.on_color : this.off_color;
-        drawing.draw_outline(this.x, this.y, this.w, this.h, bb, bb, bg_color);
+        const title = this.on ? this.on_title : this.off_title;
+        gfx.draw_outline(this.x, this.y, this.w, this.h, bb, bb, bg_color);
         let cy = y + h/2; // FIXME
-        drawing.draw_centered_text(x, cy, w, this.title, bg_color.opposite());
+        gfx.draw_centered_text(x, cy, w, title, config.color_btn_text);
     }
     click() {
         this.click_handler();
@@ -231,31 +251,36 @@ class StoreMenu {
 
 // --------------------------------------------------------------------
 class ScoopButton extends Button {
-    constructor() {
+    constructor(x, y, w, h) {
+        super.Button("Ore scoop: on", "Ore scoop: off", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_ore_scoop);
     }
 }; // class ScoopButton
 
 // --------------------------------------------------------------------
 class LSIButton extends Button {
-    constructor() {
+    constructor(x, y, w, h) {
+        super.Button("LSI: on", "LSI: off", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_lsi);
     }
 }; // class LSIButton
 
 // --------------------------------------------------------------------
 class OreDetectorButton {
-    constructor() {
+    constructor(x, y, w, h) {
+        super.Button("Ore detector: on", "Ore detector: off", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_ore_detector);
     }
 }; // class OreDetectorButton
 
 // --------------------------------------------------------------------
 class PortMapButton {
-    constructor() {
+    constructor(x, y, w, h) {
+        super.Button("Port map: on", "Port map: off", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_port_map);
     }
 }; // class PortMapButton
 
 // --------------------------------------------------------------------
 class LiveStatusButton {
-    constructor() {
+    constructor(x, y, w, h) {
+        super.Button("Status", "Status", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_live_status);
     }
 }; // class LiveStatusButton
 
@@ -285,12 +310,18 @@ class LiveStatus {
 
 // --------------------------------------------------------------------
 class LiveView {
-    constructor(offset) {
+    constructor(land, offset) {
+        this.land = land;
+        this.offset = offset;
+        this.width = ???
+    }
+    set_offset(offset) {
         this.offset = offset;
     }
-    draw(drawing) {
-        user.land.draw(drawing, user.ship.pos);
-        user.ship.draw(drawing);
+    draw(gfx) {
+        const offset = this.ship.pos - this.width / 2;
+        user.land.draw(gfx, offset);
+        user.ship.draw(gfx, this.offset);
     }
 }; // class LiveView
 
@@ -331,41 +362,41 @@ class Landscape {
         this.extend(n + 100); // FIXME
         return this.peaks[n];
     }
-    draw(drawing, xpos) {
-        this.draw_ports(drawing);
-        this.draw_land(drawing);
-        this.draw_chunks(drawing);
+    draw(gfx, pos) {
+        this.draw_ports(gfx, pos);
+        this.draw_land(gfx, pos);
+        this.draw_chunks(gfx, pos);
     }
-    draw_land(drawing) {
+    draw_land(gfx, pos) {
         if (this.peaks.length == 0) return;
-        const ctx = drawing.ctx;
-        ctx.fillStyle = config.color_land;
+        const ctx = gfx.ctx;
+        ctx.fillStyle = config.color_land.jstring();
         ctx.beginPath();
         const bot = this.y + this.h;
         let xlast = this.x;
         ctx.moveTo(x, bot);
-        for (let i = 0; i < this.peaks.length(); ++i) {
-            const x = this.x + i * config.live_view_xstep_m / config.meter_per_pix;
-            if (x >= drawing.width) break;
-            const y = this.peaks[i] / config.meter_per_pix * config.live_view_xstep_m;
+        for (let pi = this.peak_index(pos); pi < this.peaks.length(); ++pi) {
+            const x = this.x + pi * config.live_view_xstep_m / config.meter_per_pix;
+            if (x >= gfx.width) break;
+            const y = this.peaks[pi] / config.meter_per_pix * config.live_view_xstep_m;
             ctx.lineTo(x, bot - y);
             xlast = x;
         }
         ctx.lineTo(xlast, bot);
         ctx.fill();
     }
-    draw_chunks(drawing, pos) {
-        for (ci = chunk_index(xpos); this.chunks[ci].pos < drawing.width; ++ci) {
+    draw_chunks(gfx, pos) {
+        for (ci = chunk_index(pos); this.chunks[ci].pos < gfx.width; ++ci) {
             const x = ...
             const y = ...
-            this.chunks[ci].draw(drawing, x, y);
+            this.chunks[ci].draw(gfx, x, y);
         }
     }
-    draw_ports(drawing, pos) {
-        for (pi = port_index(xpos); this.ports[pi].pos < drawing.width; ++pi) {
-            const x = ...
+    draw_ports(gfx, pos) {
+        for (pi = port_index(pos); this.ports[pi].pos < gfx.width; ++pi) {
+            const x = 
             const y = ...
-            this.ports[pi].draw(drawing, x, y);
+            this.ports[pi].draw(gfx, x, y);
         }
     }
 }; // class Landscape
@@ -377,9 +408,9 @@ class OreChunk {
         this.mass = mass;
         this.pos = pos;
     }
-    draw(drawing, x, y) {
+    draw(gfx, x, y) {
         const r = Math.sqrt(this.mass) * .1; // FIXME
-        drawing.draw_circle, x, y, r, config.color_ore);
+        gfx.draw_circle(x, y, r, config.color_ore);
     }
 }; // class OreChunk
 
@@ -389,12 +420,7 @@ class Port {
         this.pos = pos;
         this.name = ???;
     }
-    buy_ore(ship, mass, acct) {
-        const cargo = ship.unload_ore();
-        const price = dollars_per_ton * mass;
-        acct.add_cash(price);
-    }
-    draw(drawing) {
+    draw(gfx) {
         const x = 
     }
 }; // class Port
@@ -407,12 +433,16 @@ class Billboard {
 
 // --------------------------------------------------------------------
 class Account {
-    constructor(name, deposit) {
-        this.name = name;
+    constructor(deposit) {
         this.balance = deposit;
     }
     add_cash(amt) {
-        balance += amt;
+        this.balance += amt;
+    }
+    sell_ore(ship, mass, dollars_per_ton, acct) {
+        const cargo = ship.unload_ore();
+        const price = dollars_per_ton * mass;
+        this.add_cash(price);
     }
 }; // class Account
 
@@ -424,35 +454,41 @@ class Loan {
 
 // --------------------------------------------------------------------
 class MassiveObject {
-    constructor(mass, pos, vel, acc, time) {
+    constructor(mass, pos, time) {
         this.mass = mass;
         this.pos = pos;
-        this.vel = vel;
-        this.acc = acc;
+        this.vel = new Vector(0,0);
+        this.acc = new Vector(0,0);
         this.time = time;
+    }
+    accelerate(xforce, yforce) {
+        this.acc = new Vector(xforce / this.mass, yforce / this.mass);
+    }
+    intersects_land(land) {
+        return false; // FIXME
     }
     update(time) {
         const dt = time - this.time;
-        this.pos += this.vel * dt;
-        this.vel += this.acc * dt;
+        this.pos.add(this.vel.mul(dt));
+        this.vel.add(this.acc.mul(dt));
         this.time = time;
-    }
-    accelerate(force) {
-        this.acc = force / this.mass;
     }
 }; // class MassiveObject
 
 // --------------------------------------------------------------------
 class Ship extends MassiveObject {
     constructor(pos) {
-        this.dash = new Dash();
+        super(config.ship_mass, pos, now());
         this.pos = pos;
-        this.thrust = 0;
+        this.bot_thrust = 0;
+        this.side_thrust = 0;
         this.cargo = 0;
+        this.max_cargo = config.ship_max_cargo;
         this.fuel = 0;
+        this.flying = false;
     }
     load_ore(chunk) {
-        ship.cargo += chunk.mass;
+        ship.cargo = Math.min(ship.cargo + chunk.mass, ship.max_cargo);
     }
     unload_ore() {
         const cargo = ship.cargo;
@@ -471,6 +507,15 @@ class Ship extends MassiveObject {
             this.side_thrust = on ? -config.ship_side_thrust : 0;
         }
     }
+    land(port) {
+        this.inport = port;
+    }
+    liftoff() {
+        this.inport = null;
+    }
+    flying() {
+        return !this.inport;
+    }
     update(time) {
         const dt = time - this.time;
         super(time);
@@ -478,22 +523,57 @@ class Ship extends MassiveObject {
         this.fuel -= fuel_used;
         if (this.fuel < 0) {
             this.fuel = 0;
-            game_over();
+            game_over("ran out of fuel");
         }
-        this.accelerate(this.thrust);
-        if (this.intersects_land()) {
-            this.xpos 
+        this.accelerate(this.bot_thrust, this.side_thrust);
+        if (this.intersects_land(user.land)) {
+            if (this.vel.norm2() > config.crash_vel2) {
+                game_over("crashed");
+            }
         }
     }
-    draw(drawing, x, y) {
-        const ctx = drawing.ctx;
+    draw(gfx, x, y) {
         const r = ctx.canvas.width * 0.01;
-        ctx.fillStyle = config.color_ship;
+        this.draw_body(gfx, x, y, r);
+        if (this.bot_thrust > 0) this.draw_bot_thrust(gfx, x, y, r);
+        if (this.side_thrust > 0) this.draw_right_thrust(gfx, x, y, r);
+        if (this.side_thrust < 0) this.draw_left_thrust(gfx, x, y, r);
+    }
+    draw_body(gfx, x, y, r) {
+        const ctx = gfx.ctx;
+        ctx.fillStyle = config.color_ship.jstring();
         ctx.beginPath();
         ctx.moveTo(x, y-r);
         ctx.lineTo(x-r/2, y+r);
         ctx.lineTo(x, y+r/2);
         ctx.lineTo(x+r/2, y+r);
+        ctx.fill();
+    }
+    draw_bot_thrust(gfx, x, y, r) {
+        const ctx = gfx.ctx;
+        ctx.fillStyle = config.color_thrust.jstring();
+        ctx.beginPath();
+        ctx.moveTo(x+r/2, y+1.5*r);
+        ctx.lineTo(x, y+3*r); // tail
+        ctx.lineTo(x-r/2, y+1.5*r);
+        ctx.fill();
+    }
+    draw_left_thrust(gfx, x, y, r) {
+        const ctx = gfx.ctx;
+        ctx.fillStyle = config.color_thrust.jstring();
+        ctx.beginPath();
+        ctx.moveTo(x-1.5*r, y-r/2);
+        ctx.lineTo(x-3*r, y); // tail
+        ctx.lineTo(x-1.5*r, y+r/2);
+        ctx.fill();
+    }
+    draw_right_thrust(gfx, x, y, r) {
+        const ctx = gfx.ctx;
+        ctx.fillStyle = config.color_thrust.jstring();
+        ctx.beginPath();
+        ctx.moveTo(x+1.5*r, y-r/2);
+        ctx.lineTo(x+3*r, y); // tail
+        ctx.lineTo(x+1.5*r, y+r/2);
         ctx.fill();
     }
 }; // class Ship
@@ -530,60 +610,67 @@ class Dash {
         this.port_map = new PortMap(p4x, p3y2, p4w, b3h);
         this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h);
     }
-    draw(drawing) {
-        this.alt_gauge.draw(drawing);
-        this.ore_gauge.draw(drawing);
-        this.fuel_gauge.draw(drawing);
-        this.scoop_btn.draw(drawing);
-        this.lsi_btn.draw(drawing);
-        this.fly_btn.draw(drawing);
-        this.ore_detector_btn.draw(drawing);
-        this.port_map_btn.draw(drawing);
-        this.live_status_btn.draw(drawing);
-        this.ore_detector.draw(drawing);
-        this.port_map.draw(drawing);
-        this.live_status.draw(drawing);
+    draw(gfx) {
+        this.alt_gauge.draw(gfx);
+        this.ore_gauge.draw(gfx);
+        this.fuel_gauge.draw(gfx);
+        this.scoop_btn.draw(gfx);
+        this.lsi_btn.draw(gfx);
+        this.fly_btn.draw(gfx);
+        this.ore_detector_btn.draw(gfx);
+        this.port_map_btn.draw(gfx);
+        this.live_status_btn.draw(gfx);
+        this.ore_detector.draw(gfx);
+        this.port_map.draw(gfx);
+        this.live_status.draw(gfx);
     }
 }; // class Dash
 
 // --------------------------------------------------------------------
-var _user = null;
-
-class User {
-    constructor(name, land) {
-        this.name = name;
-        this.land = land;
-        this.acct = new Account(name, 10000);
+class Game {
+    constructor(gfx) {
+        this.gfx = gfx;
+        this.user_acct = new Account(10000);
+        const canvas = gfx.ctx.canvas;
+        const w = canvas.width;
+        const h = canvas.height;
+        this.land = new Landscape(0, 0, w, h);
+        this.live_view = new LiveView(land, 1000);
+        this.ship = new Ship(1000);
+        this.dash = new Dash(this.ship, 0, h*.10, w, h*.25);
+        this.msg = null;
     }
-}; // class User
+    message(msg) {
+        this.msg = msg;
+    }
+    draw() {
+        const gfx = this.gfx;
+        const ctx = gfx.ctx;
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        gfx.draw_rect(0, 0, ctx.canvas.width, ctx.canvas.height, config.color_sky);
+        const time = now();
+        this.ship.update(time);
+        this.live_view.draw(gfx);
+        this.dash.draw(gfx);
+        if (this.message != null) this.messsage.draw(gfx);
+    }
+}; // class Game
 
 // --------------------------------------------------------------------
-
-function draw_ui() {
-    ///const ctx = el("drawing").getContext("2d");
-    const drawing = user.drawing;
-    drawing.ctx.clearRect(0, 0, drawing.ctx.canvas.width, drawing.ctx.canvas.height);
-    const time = now();
-    user.ship.update(time);
-    user.live_view.draw(drawing);
-    user.ship.dash.draw(drawing);
-    ...
-    window.requestAnimationFrame(draw_ui);
-}
 
 function now() {
     return performance.now();
 }
+function draw_game() {
+    _game.draw();
+    window.requestAnimationFrame(draw_game);
+}
 
 function main() {
-    const canvas = el("drawing");
-    const land = new Landscape();
-    user = new User(land);
-    user.drawing = new Drawing(canvas.getContext("2d"));
-
-    user.add_cash(10000);
-    user.ship = new Ship();
-    draw_ui();
+    const canvas = el("canvas");
+    const gfx = new Graphics(canvas.getContext("2d"));
+    _game = new Game(gfx);
+    window.requestAnimationFrame(draw_game);
 }
 
 function el(name) {
