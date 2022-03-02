@@ -91,15 +91,20 @@ class Drawing {
         this.ctx.arc(x, y, r, 0, 2*Math.PI);
         this.ctx.fill();
     }
-    draw_text(x, y, text) {
-        ctx.fillText(text, x, y);
+    draw_text(x, y, text, color) {
+        this.ctx.fillStyle = color.jstring();
+        this.ctx.fillText(text, x, y);
     }
-    draw_centered_text(x, y, w, text) {
-        const text_size = ctx.measureText(text);
+    measure_text(text) {
+        const text_size = this.ctx.measureText(text);
+        return { width: text_size.width, height: text_size.width*1.6 }; // FIXME
+    }
+    draw_centered_text(x, y, w, text, color) {
+        const text_size = this.measure_text(text);
         const nx = x + (w - text_size.width) / 2;
         if (nx > x) x = nx;
-        draw_text(x, y, text);
-        return { width: text_size.width, height: text_size.width*1.6 }; // FIXME
+        draw_text(x, y, text, color);
+        return text_size;
     }
 }; // class Drawing
 
@@ -145,8 +150,12 @@ class Gauge {
         const inh = gh - 2*gb;
         const inw = this.w - 2*gb;
         const barh = inh * this.value / this.max_value;
+        const bot = this.y + this.h;
+        const value_text = this.value.toString();
+        const value_text_size = drawing.measure_text(value_text);
         drawing.draw_outline(this.x, this.y+title_size.height, this.w, gh, gb, gb, config.color_gauge_bg);
-        drawing.draw_rect(this.x+gb, this.y+this.h-gb-barh, inw, barh);
+        drawing.draw_rect(this.x+gb, bot-gb-barh, inw, barh, this.color);
+        drawing.draw_centered_text(this.x, bot-value_text_size.h, this.w, value_text, color.opposite());
     }
 }; // class Gauge
 
@@ -186,9 +195,10 @@ class Button {
     }
     draw(drawing) {
         let bb = config.button_border;
-        drawing.draw_outline(this.x, this.y, this.w, this.h, bb, bb, this.on ? this.on_color : this.off_color);
+        const bg_color = this.on ? this.on_color : this.off_color;
+        drawing.draw_outline(this.x, this.y, this.w, this.h, bb, bb, bg_color);
         let cy = y + h/2; // FIXME
-        draw_centered_text(x, cy, w, this.title);
+        drawing.draw_centered_text(x, cy, w, this.title, bg_color.opposite());
     }
     click() {
         this.click_handler();
@@ -275,7 +285,12 @@ class LiveStatus {
 
 // --------------------------------------------------------------------
 class LiveView {
-    constructor() {
+    constructor(offset) {
+        this.offset = offset;
+    }
+    draw(drawing) {
+        user.land.draw(drawing, user.ship.pos);
+        user.ship.draw(drawing);
     }
 }; // class LiveView
 
@@ -288,47 +303,79 @@ class Landscape {
         this.h = h;
         this.peaks = [];
         this.chunks = [];
+        this.ports = [];
         this.extend(1000);
     }
     extend(pos) {
-        let n = pos - peaks.length;
-        let alt = (peaks.length == 0) ? 0 : this.peaks[this.peaks-1];
-        while (n-- > 0) {
-            this.peaks.push(alt);
+        if (this.peaks.length == 0);
+            this.peaks.push(0);
+        let alt = this.peaks[this.peaks-1];
+        while (this.peaks.length < pos) {
             alt += (Math.random() * config.alt_step) - (config.alt_step/2);
             if (alt < 0) alt = 0;
+            this.peaks.push(alt);
+            if (this.place_chunk(pos))
+                this.chunks.push(new OreChunk(??mass, pos));
+            if (this.place_port(pos))
+                this.ports.push(new Port(pos));
         }
     }
+    chunk_index(pos) {
+        for (let i = 0; i < this.chunks.length; ++i) {
+            if (this.chunks[i].pos > pos)
+                return (i == 0) ? 0 : i-1;
+        }
+        return this.chunks.length-1;
+    }
     get_peak(n) {
-        this.extend(n + 1000); // FIXME
+        this.extend(n + 100); // FIXME
         return this.peaks[n];
     }
     draw(drawing, xpos) {
-        if f(this.peaks.length == 0) return;
+        this.draw_ports(drawing);
+        this.draw_land(drawing);
+        this.draw_chunks(drawing);
+    }
+    draw_land(drawing) {
+        if (this.peaks.length == 0) return;
         const ctx = drawing.ctx;
         ctx.fillStyle = config.color_land;
         ctx.beginPath();
         const bot = this.y + this.h;
-        let x = this.x;
-        let y = 0;
+        let xlast = this.x;
         ctx.moveTo(x, bot);
         for (let i = 0; i < this.peaks.length(); ++i) {
-            x = this.x + i * config.live_view_xstep_m / config.meter_per_pix;
-            y = this.peaks[i] / config.meter_per_pix * config.live_view_xstep_m;
+            const x = this.x + i * config.live_view_xstep_m / config.meter_per_pix;
+            if (x >= drawing.width) break;
+            const y = this.peaks[i] / config.meter_per_pix * config.live_view_xstep_m;
             ctx.lineTo(x, bot - y);
+            xlast = x;
         }
-        ctx.lineTo(x, bot);
+        ctx.lineTo(xlast, bot);
         ctx.fill();
+    }
+    draw_chunks(drawing, pos) {
+        for (ci = chunk_index(xpos); this.chunks[ci].pos < drawing.width; ++ci) {
+            const x = ...
+            const y = ...
+            this.chunks[ci].draw(drawing, x, y);
+        }
+    }
+    draw_ports(drawing, pos) {
+        for (pi = port_index(xpos); this.ports[pi].pos < drawing.width; ++pi) {
+            const x = ...
+            const y = ...
+            this.ports[pi].draw(drawing, x, y);
+        }
     }
 }; // class Landscape
 
+
 // --------------------------------------------------------------------
 class OreChunk {
-    constructor(mass) {
+    constructor(mass, pos) {
         this.mass = mass;
-    }
-    mass() {
-        return this.mass;
+        this.pos = pos;
     }
     draw(drawing, x, y) {
         const r = Math.sqrt(this.mass) * .1; // FIXME
@@ -338,7 +385,17 @@ class OreChunk {
 
 // --------------------------------------------------------------------
 class Port {
-    constructor() {
+    constructor(pos) {
+        this.pos = pos;
+        this.name = ???;
+    }
+    buy_ore(ship, mass, acct) {
+        const cargo = ship.unload_ore();
+        const price = dollars_per_ton * mass;
+        acct.add_cash(price);
+    }
+    draw(drawing) {
+        const x = 
     }
 }; // class Port
 
@@ -502,13 +559,31 @@ class User {
 
 // --------------------------------------------------------------------
 
+function draw_ui() {
+    ///const ctx = el("drawing").getContext("2d");
+    const drawing = user.drawing;
+    drawing.ctx.clearRect(0, 0, drawing.ctx.canvas.width, drawing.ctx.canvas.height);
+    const time = now();
+    user.ship.update(time);
+    user.live_view.draw(drawing);
+    user.ship.dash.draw(drawing);
+    ...
+    window.requestAnimationFrame(draw_ui);
+}
+
+function now() {
+    return performance.now();
+}
+
 function main() {
     const canvas = el("drawing");
     const land = new Landscape();
     user = new User(land);
     user.drawing = new Drawing(canvas.getContext("2d"));
+
     user.add_cash(10000);
     user.ship = new Ship();
+    draw_ui();
 }
 
 function el(name) {
