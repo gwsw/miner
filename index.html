@@ -13,7 +13,7 @@ var config = {
     crit_fuel              : 2,
     gauge_border           : 3,
     meter_per_pix          : 10,
-    live_view_xstep_m      : 50,
+    view_xstep_m           : 50,
     view_width_m           : 1500,
     low_fuel               : 10,
     max_fuel               : 100,
@@ -21,6 +21,9 @@ var config = {
     ship_mass              : 50,
     ship_max_cargo         : 500,
 
+    color_btn_active       : new Color("10ff40"),
+    color_btn_inactive     : new Color("c08010"),
+    color_btn_none         : new Color("808080"),
     color_btn_text         : new Color("ffffff"),
     color_fuel             : new Color("10d040"),
     color_gauge_bg         : new Color("e0e0e0"),
@@ -87,6 +90,8 @@ class Vector {
 class Graphics {
     constructor(ctx) {
         this.ctx = ctx;
+        const text_size = ctx.measureText("M");
+        this.font_height = text_size.width * 1.5; // FIXME
     }
     function draw_rect(x, y, w, h, color) {
         if (color != undefined) this.ctx.fillStyle = color.jstring();
@@ -116,7 +121,7 @@ class Graphics {
     }
     measure_text(text) {
         const text_size = this.ctx.measureText(text);
-        return { width: text_size.width, height: text_size.width*1.6 }; // FIXME
+        return { width: text_size.width, height: this.font_height };
     }
     draw_centered_text(x, y, w, text, color) {
         const text_size = this.measure_text(text);
@@ -174,7 +179,7 @@ class Gauge {
         const value_text_size = gfx.measure_text(value_text);
         gfx.draw_outline(this.x, this.y+title_size.height, this.w, gh, gb, gb, config.color_gauge_bg);
         gfx.draw_rect(this.x+gb, bot-gb-barh, inw, barh, this.color);
-        gfx.draw_centered_text(this.x, bot-value_text_size.h, this.w, value_text, config.color_gauge_text);
+        gfx.draw_centered_text(this.x, bot-value_text_size.height, this.w, value_text, config.color_gauge_text);
     }
 }; // class Gauge
 
@@ -201,24 +206,24 @@ class AltGauge extends Gauge {
 
 // --------------------------------------------------------------------
 class Button {
-    constructor(on_title, off_title, x, y, w, h, on_color, off_color, click_handler) {
-        this.on_title = on_title;
-        this.off_title = off_title;
-        this.on = false;
-        this.on_color = on_color;
-        this.off_color = off_color;
+    constructor(state_titles, state_colors, state, x, y, w, h, click_handler) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.state_titles = state_titles;
+        this.state_colors = state_colors;
+        this.state = state;
         this.click_handler = click_handler;
     }
-    set_on(on) {
-        this.on = on;
+    set_state(state) {
+        this.state = state;
     }
     draw(gfx) {
         let bb = config.button_border;
-        const bg_color = this.on ? this.on_color : this.off_color;
-        const title = this.on ? this.on_title : this.off_title;
-        gfx.draw_outline(this.x, this.y, this.w, this.h, bb, bb, bg_color);
+        gfx.draw_outline(this.x, this.y, this.w, this.h, bb, bb, this.state_colors[this.state]);
         let cy = y + h/2; // FIXME
-        gfx.draw_centered_text(x, cy, w, title, config.color_btn_text);
+        gfx.draw_centered_text(x, cy, w, this.state_titles[this.state], config.color_btn_text);
     }
     click() {
         this.click_handler();
@@ -252,35 +257,44 @@ class StoreMenu {
 // --------------------------------------------------------------------
 class ScoopButton extends Button {
     constructor(x, y, w, h) {
-        super.Button("Ore scoop: on", "Ore scoop: off", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_ore_scoop);
+        super.Button(["Ore scoop: off", "Ore scoop: on", "Ore scoop: none"],
+            [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
+            2, x, y, w, h, click_ore_scoop);
     }
 }; // class ScoopButton
 
 // --------------------------------------------------------------------
 class LSIButton extends Button {
     constructor(x, y, w, h) {
-        super.Button("LSI: on", "LSI: off", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_lsi);
+        super.Button(["LSI: off", "LSI: on"],
+            [config.color_btn_inactive, config.color_btn_active],
+            0, x, y, w, h,  click_lsi);
     }
 }; // class LSIButton
 
 // --------------------------------------------------------------------
 class OreDetectorButton {
     constructor(x, y, w, h) {
-        super.Button("Ore detector: on", "Ore detector: off", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_ore_detector);
+        super.Button(["Ore detector: off", "Ore detector: on", "Ore detector: none"],
+            [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
+            2, x, y, w, h, click_ore_detector);
     }
 }; // class OreDetectorButton
 
 // --------------------------------------------------------------------
 class PortMapButton {
     constructor(x, y, w, h) {
-        super.Button("Port map: on", "Port map: off", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_port_map);
+        super.Button(["Port map: off", "Port map: on", "Port map: none"],
+            [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
+            2, x, y, w, h, click_port_map);
     }
 }; // class PortMapButton
 
 // --------------------------------------------------------------------
 class LiveStatusButton {
     constructor(x, y, w, h) {
-        super.Button("Status", "Status", x, y, w, h, config.color_btn_active, config.color_btn_inactive, click_live_status);
+        super.Button(["Status"], [config.color_btn_none], 
+            0, x, y, w, h, click_live_status);
     }
 }; // class LiveStatusButton
 
@@ -376,9 +390,9 @@ class Landscape {
         let xlast = this.x;
         ctx.moveTo(x, bot);
         for (let pi = this.peak_index(pos); pi < this.peaks.length(); ++pi) {
-            const x = this.x + pi * config.live_view_xstep_m / config.meter_per_pix;
+            const x = this.x + pi * config.view_xstep_m / config.meter_per_pix;
             if (x >= gfx.width) break;
-            const y = this.peaks[pi] / config.meter_per_pix * config.live_view_xstep_m;
+            const y = this.peaks[pi] / config.meter_per_pix * config.view_xstep_m;
             ctx.lineTo(x, bot - y);
             xlast = x;
         }
@@ -634,10 +648,13 @@ class Game {
         const canvas = gfx.ctx.canvas;
         const w = canvas.width;
         const h = canvas.height;
-        this.land = new Landscape(0, 0, w, h);
-        this.live_view = new LiveView(land, 1000);
+        const dash_y = h*.08;
+        const dash_h = h*.25;
+        const view_y = dash_y + dash_h;
+        const view_h = h - view_y;
         this.ship = new Ship(1000);
-        this.dash = new Dash(this.ship, 0, h*.10, w, h*.25);
+        this.dash = new Dash(this.ship, 0, dash_y, w, dash_h);
+        this.view = new LiveView(0, view_y, w, view_h);
         this.msg = null;
     }
     message(msg) {
@@ -650,13 +667,19 @@ class Game {
         gfx.draw_rect(0, 0, ctx.canvas.width, ctx.canvas.height, config.color_sky);
         const time = now();
         this.ship.update(time);
-        this.live_view.draw(gfx);
+        this.view.draw(gfx);
         this.dash.draw(gfx);
-        if (this.message != null) this.messsage.draw(gfx);
+        this.draw_message(thimsg);
+    }
+    draw_message() {
+        if (this.msg != null) return;
+        ...
     }
 }; // class Game
 
 // --------------------------------------------------------------------
+
+var _game = null;
 
 function now() {
     return performance.now();
@@ -677,6 +700,11 @@ function el(name) {
     return document.getElementById(name);
 }
 
+function hex2(n) {
+    let hex = Math.floor(n).toString(16);
+    while (hex.length < 2) hex = "0"+hex;
+    return hex;
+}
 </script>
 </body>
 </html>
