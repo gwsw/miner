@@ -2,7 +2,7 @@
 <meta charset="UTF-8">
 <html>
 <head>
-<title>Lunar Miner</title>
+<title>Asteroid Miner</title>
 </head>
 <body onload="main()">
 <canvas id="canvas" width="1" height="1"></canvas>
@@ -15,17 +15,22 @@ var _game = null;
 var config = {
     button_border          : 5,
     crit_fuel              : 2,
+    deposit_screens_per    : 1,
+    port_screens_per       : 5,
     gauge_border           : 3,
-    meter_per_pix          : 10,
-    view_xstep_m           : 50,
-    view_width_m           : 1500,
-    world_diam             : 1000*1000, // 1000 km
-    ports_per_km           : 0.2,
     low_fuel               : 10,
     max_fuel               : 100,
+    meter_per_pix          : 10,
+    ore_mass_min           : 8,
+    ore_mass_max           : 1000,
+    ports_per_km           : 0.2,
     ship_bot_thrust        : 10,
     ship_mass              : 50,
+    alt_step               : 24, // pixels
     ship_max_cargo         : 500,
+    view_width_m           : 1500,
+    view_xstep_m           : 50,
+    ///world_diam             : 1000*1000, // 1000 km
 
     color_btn_active       : new Color("10ff40"),
     color_btn_inactive     : new Color("c08010"),
@@ -34,7 +39,7 @@ var config = {
     color_fuel             : new Color("10d040"),
     color_gauge_bg         : new Color("e0e0e0"),
     color_gauge_text       : new Color("000000"),
-    color_land             : new Color("707070"),
+    color_terrain          : new Color("707070"),
     color_ore              : new Color("c000c0"),
     color_sky              : new Color("000000"),
     color_ship             : new Color("10ffff"),
@@ -97,7 +102,7 @@ class Graphics {
     constructor(ctx) {
         this.ctx = ctx;
         const text_size = ctx.measureText("M");
-        this.font_height = text_size.width * 1.5; // FIXME
+        this.font_height = text_size.width * 1.9; // FIXME
     }
     clear(color) {
         const canvas = this.ctx.canvas;
@@ -187,7 +192,9 @@ class Gauge {
         gfx.draw_rect(this.x+gb, bot-gb-barh, inw, barh, this.color);
         gfx.draw_centered_text(this.x, bot-value_text_size.height, this.w, value_text, config.color_gauge_text);
         if (this.value <= this.crit_value) {
+            gfx.draw_centered_text(this.x, this.y+this.h/2-value_text_size.height/2 this.w, "LOW", config.color_gauge_low);
         } else if (this.value <= this.low_value) {
+            gfx.draw_centered_text(this.x, this.y+this.h/2-value_text_size.height/2 this.w, "CRITICAL", config.color_gauge_crit);
         }
     }
 }; // class Gauge
@@ -209,7 +216,7 @@ class OreGauge extends Gauge {
 // --------------------------------------------------------------------
 class AltGauge extends Gauge {
     constructor(x, y, w, h) {
-        super(x, y, w, h, "Alt", config.land_color, config.max_alt);
+        super(x, y, w, h, "Alt", config.color_terrain, config.max_alt);
     }
 }; // class AltGauge 
 
@@ -335,39 +342,16 @@ class LiveStatus {
 }; // class LiveStatus
 
 // --------------------------------------------------------------------
-class LiveView {
-    constructor(x, y, w, h, offset, ship) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
-        this.offset = offset;
-        this.ship = ship;
-        this.land = new Land(x, y, w, h);
-        this.ports = new Ports(x, y, w, h);
-        this.deposits = new OreDeposits(x, y, w, h);
-    }
-    set_offset(offset) {
-        this.offset = offset;
-    }
-    draw(gfx) {
-        const offset = this.ship.pos - this.width / 2;
-        this.land.draw(gfx, offset);
-        this.ship.draw(gfx, this.offset);
-    }
-}; // class LiveView
-
-// --------------------------------------------------------------------
-class Land {
+class Terrain {
     constructor(x, y, w, h) {
         this.x = x;
         this.y = y;
         this.w = w;
         this.h = h;
         this.peaks = [];
-        this.extend(1000);
+        this.extend(-1000, 1000);
     }
-    extend(pos) {
+    extend(spos, epos) {
         if (this.peaks.length == 0);
             this.peaks.push(0);
         let alt = this.peaks[this.peaks-1];
@@ -375,27 +359,22 @@ class Land {
             alt += (Math.random() * config.alt_step) - (config.alt_step/2);
             if (alt < 0) alt = 0;
             this.peaks.push(alt);
-            if (this.place_chunk(pos))
-                this.chunks.push(new OreChunk(??mass, pos));
-            if (this.place_port(pos))
-                this.ports.push(new Port(pos));
         }
-    }
-    chunk_index(pos) {
-        for (let i = 0; i < this.chunks.length; ++i) {
-            if (this.chunks[i].pos > pos)
-                return (i == 0) ? 0 : i-1;
-        }
-        return this.chunks.length-1;
     }
     get_peak(n) {
-        this.extend(n + 100); // FIXME
+        this.extend(n-100, n+100); // FIXME
         return this.peaks[n];
+    }
+    height(pos) {
+        this.extend(pos, pos);
+/*<<<*/
+/*<<<*/ const lo = 0;
+/*<<<*/
     }
     draw(gfx, pos) {
         if (this.peaks.length == 0) return;
         const ctx = gfx.ctx;
-        ctx.fillStyle = config.color_land.jstring();
+        ctx.fillStyle = config.color_terrain.jstring();
         ctx.beginPath();
         const bot = this.y + this.h;
         let xlast = this.x;
@@ -410,45 +389,81 @@ class Land {
         ctx.lineTo(xlast, bot);
         ctx.fill();
     }
-}; // class Land
+}; // class Terrain
 
 // --------------------------------------------------------------------
-class Ports {
-    constructor(x, y, w, h) {
+class ResourceList {
+    constructor(x, y, w, h, screens_per) {
         this.x = x;
         this.y = y;
         this.w = w;
         this.h = h;
-        this.ports = [];
-        var num_ports = config.world_diam * config.ports_per_km / 1000;
-        while (num_ports-- > 0) {
-            this.ports.push(new Port());
-        }
+        this.screens_per = screens_per;
+        this.resources = [];
+    }
+    place(pos, thing) {
+        const mag = 10;
+        return (randu(this.screens_per * this.w * mag) < mag);
     }
     draw(gfx, pos) {
-        for (pi = port_index(pos); this.ports[pi].pos < gfx.width; ++pi) {
-            const x = 
-            const y = ...
-            this.ports[pi].draw(gfx, x, y);
+        for (pi = index(pos); pi < this.resources.length; ++pi) {
+            const x = this.x + (this.resources[pi].pos - pos);
+            if (x >= gfx.width) break;
+            const y = this.y - this.terrain.height(this.resources[pi].pos);
+            if (y >= 0)
+                this.resources[pi].draw(gfx, x, y);
+        }
+    }
+}; // class ResourceList
+
+// --------------------------------------------------------------------
+class Ports extends ResourceList {
+    constructor(x, y, w, h, terrain) {
+        super(x, y, w, h, config.port_screens_per);
+        this.terrain = terrain;
+    }
+    extend(spos, epos) {
+        for (pos = spos; pos < epos; ++pos) {
+            if (place(pos))
+                this.ports.push(new Port(pos));
         }
     }
 }; // class Ports
 
 // --------------------------------------------------------------------
-class OreDeposits {
-    constructor() {
+class OreDeposits extends ResourceList {
+    constructor(x, y, w, h) {
+        super(x, y, w, h, config.deposit_screens_per);
     }
-    draw_chunks(gfx, pos) {
-        for (ci = chunk_index(pos); this.chunks[ci].pos < gfx.width; ++ci) {
-            const x = ...
-            const y = ...
-            this.chunks[ci].draw(gfx, x, y);
+    extend(spos, epos) {
+        for (pos = spos; pos < epos; ++pos) {
+            if (place(pos))
+                this.deposits.push(new OreDeposit(ore_mass(pos), pos));
         }
+    }
+    ore_mass(pos) {
+        const M = config.ore_mass_max;
+        const k = nhash(pos) % M;
+        return Math.floor((k*k*k) / (M*M));
+    }
+    nhash(n) {
+        let r = 0;
+        for (i = 0; i < 32; ++i) {
+            const bit = n ^ (n >> 2) ^ (n >> 3) ^ (n >> 5);
+            n = (n >> 1) | (bit << 15);
+        }
+    }
+    deposit_index(pos) {
+        for (let i = 0; i < this.deposits.length; ++i) {
+            if (this.deposits[i].pos > pos)
+                return (i == 0) ? 0 : i-1;
+        }
+        return this.deposits.length-1;
     }
 }; // class OreDeposits
 
 // --------------------------------------------------------------------
-class OreChunk {
+class OreDeposit {
     constructor(mass, pos) {
         this.mass = mass;
         this.pos = pos;
@@ -457,24 +472,48 @@ class OreChunk {
         const r = Math.sqrt(this.mass) * .1; // FIXME
         gfx.draw_circle(x, y, r, config.color_ore);
     }
-}; // class OreChunk
-
-// --------------------------------------------------------------------
-class Port {
-    constructor(pos) {
-        this.pos = pos;
-        this.name = ???;
-    }
-    draw(gfx) {
-        const x = 
-    }
-}; // class Port
+}; // class OreDeposit
 
 // --------------------------------------------------------------------
 class Billboard {
     constructor() {
     }
 }; // class Billboard
+
+// --------------------------------------------------------------------
+class Port {
+    constructor(pos) {
+        this.pos = pos;
+        this.name = "Omega Station";
+    }
+    draw(gfx) {
+    }
+}; // class Port
+
+// --------------------------------------------------------------------
+class LiveView {
+    constructor(x, y, w, h, ship) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.ship = ship;
+        this.terrain = new Terrain(x, y, w, h);
+        this.ports = new Ports(x, y, w, h, this.terrain);
+        this.deposits = new OreDeposits(x, y, w, h);
+    }
+    extend(spos, epos) {
+        this.terrain.extend(spos, epos);
+        this.ports.extend(spos, epos);
+        this.deposits.extend(spos, epos);
+    }
+    draw(gfx) {
+        const pos = this.ship.pos - this.width/2;
+        this.extend(pos, pos + this.width);
+        this.land.draw(gfx, pos);
+        this.ship.draw(gfx, pos);
+    }
+}; // class LiveView
 
 // --------------------------------------------------------------------
 class Account {
@@ -509,7 +548,7 @@ class MassiveObject {
     accelerate(xforce, yforce) {
         this.acc = new Vector(xforce / this.mass, yforce / this.mass);
     }
-    intersects_land(land) {
+    intersects_terrain(terrain) {
         return false; // FIXME
     }
     update(time) {
@@ -533,8 +572,8 @@ class Ship extends MassiveObject {
         this.flying = false;
         this.inport = null;
     }
-    load_ore(chunk) {
-        ship.cargo = Math.min(ship.cargo + chunk.mass, ship.max_cargo);
+    load_ore(deposit) {
+        ship.cargo = Math.min(ship.cargo + deposit.mass, ship.max_cargo);
     }
     unload_ore() {
         const cargo = ship.cargo;
@@ -575,7 +614,7 @@ class Ship extends MassiveObject {
             game_over("ran out of fuel");
         }
         this.accelerate(this.bot_thrust, this.side_thrust);
-        if (this.intersects_land(user.land)) {
+        if (this.intersects_terrain(user.terrain)) {
             if (this.vel.norm2() > config.crash_vel2) {
                 game_over("crashed");
             } else {
