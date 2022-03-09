@@ -5,7 +5,7 @@
 <title>Asteroid Miner</title>
 </head>
 <body onload="main()">
-<canvas id="canvas" width="1" height="1"></canvas>
+<canvas id="canvas" width="1" height="1" style="font-family:Arial"></canvas>
 <script>
 
 // --------------------------------------------------------------------
@@ -36,12 +36,14 @@ var config = {
     color_btn_inactive     : "c08010",
     color_btn_none         : "808080",
     color_btn_text         : "ffffff",
+    color_dash_bg          : "909090",
     color_fuel             : "10d040",
     color_gauge_bg         : "e0e0e0",
     color_gauge_text       : "000000",
     color_gauge_title      : "ffffff",
     color_gauge_low        : "d09000",
     color_gauge_crit       : "ff1010",
+    color_resmap_bg        : "a0a000",
     color_terrain          : "707070",
     color_ore              : "c000c0",
     color_port             : "ff0000",
@@ -131,6 +133,10 @@ class Graphics {
     draw_centered_outline(cx, cy, w, h, xb, yb, color) {
         this.draw_outline(cx - w/2, cy - h/2, w, h, xb, yb, color);
     }
+    draw_outlined_rect(x, y, w, h, xb, yb, bg_color, border_color) {
+        this.draw_rect(x+xb, y+yb, w-2*xb, h-2*yb, bg_color);
+        this.draw_outline(x, y, w, h, xb, yb, border_color);
+    }
     draw_circle(x, y, r, color) {
         this.ctx.beginPath();
         this.ctx.fillStyle = color.jstring();
@@ -192,7 +198,7 @@ class Gauge {
         const bot = this.y + this.h;
         const value_text = this.value.toString();
         const value_text_size = gfx.measure_text(value_text);
-        gfx.draw_outline(this.x, this.y+title_size.height, this.w, gh, gb, gb, config.color_gauge_bg);
+        gfx.draw_outlined_rect(this.x, this.y+title_size.height, this.w, gh, gb, gb, config.color_gauge_bg, config.color_sky);
         gfx.draw_rect(this.x+gb, bot-gb-barh, inw, barh, this.color);
         gfx.draw_centered_text(this.x, bot-value_text_size.height, this.w, value_text, config.color_gauge_text);
         if (this.value <= this.crit_value) {
@@ -247,7 +253,7 @@ class Button {
     }
     draw(gfx) {
         let bb = config.button_border;
-        gfx.draw_outline(this.x, this.y, this.w, this.h, bb, bb, this.state_colors[this.state]);
+        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, bb, bb, this.state_colors[this.state], config.color_sky);
         let cy = this.y + this.h/2; // FIXME
         gfx.draw_centered_text(this.x, cy, this.w, this.state_titles[this.state], config.color_btn_text);
     }
@@ -333,23 +339,28 @@ class LiveStatusButton extends Button {
 
 // --------------------------------------------------------------------
 class ResourceMap {
-    constructor() {
+    constructor(x, y, w, h) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
     }
-    draw(ctx) {
+    draw(gfx) {
+        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, 5, 5, config.color_resmap_bg, config.color_fuel, config.color_sky); 
     }
 }; // class ResourceMap
 
 // --------------------------------------------------------------------
 class OreDetector extends ResourceMap {
-    constructor() {
-        super();
+    constructor(x, y, w, h) {
+        super(x, y, w, h);
     }
 }; // class OreDetector
 
 // --------------------------------------------------------------------
 class PortMap extends ResourceMap {
-    constructor() {
-        super();
+    constructor(x, y, w, h) {
+        super(x, y, w, h);
     }
 }; // class PortMap
 
@@ -703,7 +714,7 @@ class Dash {
         const b   = w * .01;
         const p1w = w * .15;
         const p2w = w * .20;
-        const p3w = w * .10;
+        const p3w = w * .25;
         const p4w = w - (p1w + p2w + 2*p3w + 4*b);
         const p1x = x;
         const p2x = p1x + p1w;
