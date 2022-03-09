@@ -13,21 +13,23 @@
 var _game = null;
 
 var config = {
-    button_border          : 5,
+    button_border          : 3,
     crit_fuel              : 2,
     deposit_screens_per    : 1,
-    port_screens_per       : 5,
+    fuel_per_thrust        : 0.2,
     gauge_border           : 3,
     low_fuel               : 10,
+    max_elev               : 1000,
     max_fuel               : 100,
     meter_per_pix          : 10,
-    ore_mass_min           : 8,
     ore_mass_max           : 1000,
+    ore_mass_min           : 8,
+    port_screens_per       : 5,
     ports_per_km           : 0.2,
     ship_bot_thrust        : 10,
     ship_mass              : 50,
-    terr_step              : 24, // pixels
     ship_max_cargo         : 500,
+    terr_step              : 24, // pixels
     view_width_m           : 1500,
     view_xstep_m           : 50,
     ///world_diam             : 1000*1000, // 1000 km
@@ -36,14 +38,15 @@ var config = {
     color_btn_inactive     : "c08010",
     color_btn_none         : "808080",
     color_btn_text         : "ffffff",
-    color_dash_bg          : "909090",
+    color_dash_bg          : "669ae4",
     color_fuel             : "10d040",
     color_gauge_bg         : "e0e0e0",
+    color_gauge_border     : "a098b0",
     color_gauge_text       : "000000",
     color_gauge_title      : "ffffff",
     color_gauge_low        : "d09000",
     color_gauge_crit       : "ff1010",
-    color_resmap_bg        : "a0a000",
+    color_resmap_bg        : "a8a818",
     color_terrain          : "707070",
     color_ore              : "c000c0",
     color_port             : "ff0000",
@@ -108,7 +111,7 @@ class Graphics {
     constructor(ctx) {
         this.ctx = ctx;
         const text_size = ctx.measureText("M");
-        this.font_height = Math.floor(text_size.width * 1.9); // FIXME
+        this.font_height = Math.floor(text_size.width * 1.5); // FIXME
     }
     clear(color) {
         const canvas = this.ctx.canvas;
@@ -145,7 +148,7 @@ class Graphics {
     }
     draw_text(x, y, text, color) {
         this.ctx.fillStyle = color.jstring();
-        this.ctx.fillText(text, x, y);
+        this.ctx.fillText(text, x, y+this.font_height);
     }
     measure_text(text) {
         const text_size = this.ctx.measureText(text);
@@ -168,7 +171,7 @@ class DashClock {
 
 // --------------------------------------------------------------------
 class Gauge {
-    constructor(x, y, w, h, title, color, max_value, low_value = -1, crit_value = -1) {
+    constructor(x, y, w, h, title, color, max_value, low_value = -1, crit_value = -1, fetcher = null) {
         this.title = title;
         this.x = x;
         this.y = y;
@@ -178,6 +181,7 @@ class Gauge {
         this.max_value = max_value;
         this.low_value = low_value;
         this.crit_value = crit_value;
+        this.fetcher = fetcher;
         this.value = 0;
     }
     set_value(value) {
@@ -189,18 +193,20 @@ class Gauge {
         return this.value;
     }
     draw(gfx) {
+        if (this.fetcher != null)
+            this.value = this.fetcher.gauge_value();
         let title_size = gfx.draw_centered_text(this.x, this.y, this.w, this.title, config.color_gauge_title);
-        const gh = this.h - title_size.height;
+        const gh = this.h - title_size.height *1.5;
         const gb = config.gauge_border;
         const inh = gh - 2*gb;
         const inw = this.w - 2*gb;
         const barh = inh * this.value / this.max_value;
         const bot = this.y + this.h;
-        const value_text = this.value.toString();
+        const value_text = Math.floor(this.value).toString();
         const value_text_size = gfx.measure_text(value_text);
-        gfx.draw_outlined_rect(this.x, this.y+title_size.height, this.w, gh, gb, gb, config.color_gauge_bg, config.color_sky);
+        gfx.draw_outlined_rect(this.x, bot-gh, this.w, gh, gb, gb, config.color_gauge_bg, config.color_sky);
         gfx.draw_rect(this.x+gb, bot-gb-barh, inw, barh, this.color);
-        gfx.draw_centered_text(this.x, bot-value_text_size.height, this.w, value_text, config.color_gauge_text);
+        gfx.draw_centered_text(this.x, bot-value_text_size.height*1.5, this.w, value_text, config.color_gauge_text);
         if (this.value <= this.crit_value) {
             gfx.draw_centered_text(this.x, this.y+this.h/2-value_text_size.height/2, this.w, "LOW", config.color_gauge_low);
         } else if (this.value <= this.low_value) {
@@ -212,23 +218,23 @@ class Gauge {
 // --------------------------------------------------------------------
 class FuelGauge extends Gauge {
     constructor(x, y, w, h, ship) {
-        super(x, y, w, h, "Fuel", config.fuel_color, config.max_fuel, config.low_fuel, config.crit_fuel);
+        super(x, y, w, h, "Fuel", config.color_fuel, config.max_fuel, config.low_fuel, config.crit_fuel, new ShipFuelFetcher(ship));
     }
 }; // class FuelGauge
 
 // --------------------------------------------------------------------
 class OreGauge extends Gauge {
     constructor(x, y, w, h, ship) {
-        super(x, y, w, h, "Cargo", config.ore_color, ship.max_cargo);
+        super(x, y, w, h, "Cargo", config.color_ore, ship.max_cargo, -1, -1, new ShipCargoFetcher(ship));
     }
 }; // class OreGauge
 
 // --------------------------------------------------------------------
-class AltGauge extends Gauge {
+class ElevationGauge extends Gauge {
     constructor(x, y, w, h, ship) {
-        super(x, y, w, h, "Alt", config.color_terrain, config.max_alt);
+        super(x, y, w, h, "Elev.", config.color_terrain, config.max_elev);
     }
-}; // class AltGauge 
+}; // class ElevationGauge
 
 // --------------------------------------------------------------------
 class Button {
@@ -254,7 +260,8 @@ class Button {
     draw(gfx) {
         let bb = config.button_border;
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, bb, bb, this.state_colors[this.state], config.color_sky);
-        let cy = this.y + this.h/2; // FIXME
+        //let cy = this.y + this.h/2; // FIXME
+        let cy = this.y + (this.h - gfx.font_height) / 2;
         gfx.draw_centered_text(this.x, cy, this.w, this.state_titles[this.state], config.color_btn_text);
     }
 }; // class Button
@@ -306,6 +313,15 @@ class LSIButton extends Button {
 }; // class LSIButton
 
 // --------------------------------------------------------------------
+class FlyingButton extends Button {
+    constructor(x, y, w, h) {
+        super(["On ground", "Flying"],
+            [config.color_btn_inactive, config.color_btn_active],
+            0, x, y, w, h, null);
+    }
+}; // class LSIButton
+
+// --------------------------------------------------------------------
 class OreDetectorButton extends Button {
     constructor(x, y, w, h) {
         super(["Ore detector: off", "Ore detector: on", "Ore detector: none"],
@@ -344,9 +360,18 @@ class ResourceMap {
         this.y = y;
         this.w = w;
         this.h = h;
+        this.installed = false;
+        this.active = false;
+    }
+    install(ship) {
+        this.installed = true;
+    }
+    activate(active) {
+        this.active = active;
     }
     draw(gfx) {
-        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, 5, 5, config.color_resmap_bg, config.color_fuel, config.color_sky); 
+        const color = this.active ? config.color_resmap_bg : this.installed ? config.color_btn_inactive : config.color_btn_none;
+        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, config.gauge_border, config.gauge_border, color, config.color_sky); 
     }
 }; // class ResourceMap
 
@@ -419,7 +444,7 @@ class Terrain {
         for (let pi = this.index(pos); pi < this.peaks.length; ++pi) {
             ////const x = this.x + pi * config.view_xstep_m / config.meter_per_pix;
             const x = this.x + pi * config.terr_step;
-            if (x >= gfx.width) break;
+            if (x >= gfx.ctx.canvas.width) break;
             const y = this.peaks[pi] / config.terr_step;
             ctx.lineTo(x, bot - y);
             xlast = x;
@@ -458,7 +483,7 @@ class LandObjects {
             const x1 = this.x;
             const x2 = this.resources[pi].pos;
             const x = x1 + (x2 - pos);
-            if (x >= gfx.width) break;
+            if (x >= gfx.ctx.canvas.width) break;
             const y = this.y - this.terrain.elevation(this.resources[pi].pos);
             if (y >= 0)
                 this.resources[pi].draw(gfx, x, y);
@@ -657,8 +682,10 @@ class Ship extends MassiveObject {
         }
         this.accelerate(this.bot_thrust, this.side_thrust);
     }
-    draw(gfx, x, y) {
+    draw(gfx, pos) {
         const r = gfx.ctx.canvas.width * 0.01;
+        const x = this.loc.x - pos;
+        const y = this.loc.y;
         this.draw_body(gfx, x, y, r);
         if (this.bot_thrust > 0) this.draw_bot_thrust(gfx, x, y, r);
         if (this.side_thrust > 0) this.draw_right_thrust(gfx, x, y, r);
@@ -703,6 +730,16 @@ class Ship extends MassiveObject {
     }
 }; // class Ship
 
+class ShipFuelFetcher {
+    constructor(ship) { this.ship = ship; }
+    gauge_value() { return this.ship.fuel; }
+};
+
+class ShipCargoFetcher {
+    constructor(ship) { this.ship = ship; }
+    gauge_value() { return this.ship.cargo; }
+};
+
 // --------------------------------------------------------------------
 class Dash {
     constructor(x, y, w, h, ship) {
@@ -715,24 +752,24 @@ class Dash {
         const p1w = w * .15;
         const p2w = w * .20;
         const p3w = w * .25;
-        const p4w = w - (p1w + p2w + 2*p3w + 4*b);
+        const p4w = w - (p1w + p2w + p3w + 5*b);
         const p1x = x;
-        const p2x = p1x + p1w;
-        const p3x = p2x + p2w;
-        const p4x = p3x + p3w;
-        const gw = (p2w - 4*b) / 3;
+        const p2x = p1x + p1w + b;
+        const p3x = p2x + p2w + b;
+        const p4x = p3x + p3w + b;
+        const gw = Math.floor((p2w-2*b)/ 3);
         const gh = h - 2*b;
         const b3w = (p3w-b) / 2;
-        const b3h = (h-4*b) / 3;
+        const b3h = Math.floor((h-4*b) / 3);
         const p3x2 = p3x + b3w + b;
         const p3y2 = y+b+b3h+b;
         const p3y3 = p3y2+b3h+b;
-        this.alt_gauge = new AltGauge(p2x, y+b, gw, gh, ship);
+        this.elev_gauge = new ElevationGauge(p2x, y+b, gw, gh, ship);
         this.ore_gauge = new OreGauge(p2x+gw+b, y+b, gw, gh, ship);
         this.fuel_gauge = new FuelGauge(p2x+2*(gw+b), y+b, gw, gh, ship);
         this.scoop_btn = new ScoopButton(p3x, y+b, b3w, b3h);
         this.lsi_btn = new LSIButton(p3x, p3y2, b3w, b3h);
-        //this.fly_btn = new FlyButton(p3x, p3y3, b3w, b3h);
+        this.fly_btn = new FlyingButton(p3x, p3y3, b3w, b3h);
         this.ore_detector_btn = new OreDetectorButton(p3x2, y+b, b3w, b3h);
         this.port_map_btn = new PortMapButton(p3x2, p3y2, b3w, b3h);
         this.live_status_btn = new LiveStatusButton(p3x2, p3y3, b3w, b3h);
@@ -752,12 +789,12 @@ class Dash {
     }
     draw(gfx) {
         gfx.draw_rect(this.x, this.y, this.w, this.h, config.color_dash_bg);
-        this.alt_gauge.draw(gfx);
+        this.elev_gauge.draw(gfx);
         this.ore_gauge.draw(gfx);
         this.fuel_gauge.draw(gfx);
         this.scoop_btn.draw(gfx);
         this.lsi_btn.draw(gfx);
-        //this.fly_btn.draw(gfx);
+        this.fly_btn.draw(gfx);
         this.ore_detector_btn.draw(gfx);
         this.port_map_btn.draw(gfx);
         this.live_status_btn.draw(gfx);
@@ -775,17 +812,16 @@ class Game {
         const canvas = gfx.ctx.canvas;
         const cw = canvas.width;
         const ch = canvas.height;
-        const dash_y = Math.floor(ch*.08);
-        const dash_h = Math.floor(ch*.25);
-        const view_y = dash_y + dash_h;
+        const dash_y = Math.floor(ch*.04);
+        const dash_h = Math.floor(ch*.30);
+        const space = Math.floor(ch*.01);
+        const view_y = dash_y + dash_h + space;
         const view_h = ch - view_y;
         this.ship = new Ship(1000, 0);
+this.ship.add_fuel(this.ship.max_fuel/3);
         this.dash = new Dash(0, dash_y, cw, dash_h, this.ship);
         this.view = new LiveView(0, view_y, cw, view_h, this.ship);
         this.msg = null;
-        document.addEventListener('keyup',   Game._event_keyup);
-        document.addEventListener('keydown', Game._event_keydown);
-        document.addEventListener('click',   Game._event_click);
     }
     run() {
         const time = now();
@@ -813,10 +849,9 @@ class Game {
         }
     }
     draw() {
-        const gfx = this.gfx;
-        gfx.clear(config.color_sky);
-        this.view.draw(gfx);
-        this.dash.draw(gfx);
+        this.gfx.clear(config.color_sky);
+        this.view.draw(this.gfx);
+        this.dash.draw(this.gfx);
         this.draw_message();
     }
     static _event_keydown(e) {
@@ -841,13 +876,13 @@ class Game {
     }
     set_thrust(code, on) {
         switch (code) {
-        case 'downArrow':
+        case 'ArrowDown':
             this.ship.set_bot_thrust(on);
             break;
-        case 'rightArrow':
+        case 'ArrowRight':
             this.ship.set_side_thrust(false, on);
             break;
-        case 'leftArrow':
+        case 'ArrowLeft':
             this.ship.set_side_thrust(true, on);
             break;
         }
@@ -872,14 +907,25 @@ function run_game() {
     window.requestAnimationFrame(run_game);
 }
 
+function canvas_resize() {
+    const s = 20;
+    const canvas = el("canvas");
+    canvas.width = window.innerWidth - s;
+    canvas.height = window.innerHeight - s;
+}
+
 function main() {
     munge_config();
+    canvas_resize();
     const canvas = el("canvas");
-    canvas.width = window.innerWidth -20;
-    canvas.height = window.innerHeight -20;
     const gfx = new Graphics(canvas.getContext("2d"));
+    gfx.ctx.font = Math.floor(canvas.height*.022).toString()+"px sans-serif";
     _game = new Game(gfx);
-    window.requestAnimationFrame(run_game);
+    document.addEventListener('keyup',   Game._event_keyup);
+    document.addEventListener('keydown', Game._event_keydown);
+    document.addEventListener('click',   Game._event_click);
+    window.addEventListener('resize', canvas_resize, false);
+    run_game();
 }
 
 function munge_config() {
