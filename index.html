@@ -38,7 +38,9 @@ var config = {
     color_btn_active       : "10ff40",
     color_btn_inactive     : "c08010",
     color_btn_none         : "808080",
-    color_btn_text         : "ffffff",
+    color_btn_active_fg    : "000000",
+    color_btn_inactive_fg  : "ffffff",
+    color_btn_none_fg      : "ffffff",
     color_dash_bg          : "669ae4",
     color_fuel             : "10d040",
     color_gauge_bg         : "e0e0e0",
@@ -48,6 +50,8 @@ var config = {
     color_gauge_low        : "d09000",
     color_gauge_crit       : "ff1010",
     color_resmap_bg        : "a8a818",
+    color_status_bg        : "d0d050",
+    color_status_fg        : "000000",
     color_terrain          : "707070",
     color_ore              : "c000c0",
     color_port             : "ff0000",
@@ -239,13 +243,14 @@ class ElevationGauge extends Gauge {
 
 // --------------------------------------------------------------------
 class Button {
-    constructor(state_titles, state_colors, state, x, y, w, h, click_handler, state_fetcher) {
+    constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, click_handler, state_fetcher) {
         this.x = x;
         this.y = y;
         this.w = w;
         this.h = h;
         this.state_titles = state_titles;
         this.state_colors = state_colors;
+        this.state_colors_fg = state_colors_fg;
         this.state = state;
         this.click_handler = click_handler;
         this.state_fetcher = state_fetcher;
@@ -266,7 +271,7 @@ class Button {
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, bb, bb, this.state_colors[this.state], config.color_sky);
         //let cy = this.y + this.h/2; // FIXME
         let cy = this.y + (this.h - gfx.font_height) / 2;
-        gfx.draw_centered_text(this.x, cy, this.w, this.state_titles[this.state], config.color_btn_text);
+        gfx.draw_centered_text(this.x, cy, this.w, this.state_titles[this.state], this.state_colors_fg[this.state]);
     }
 }; // class Button
 
@@ -299,6 +304,7 @@ class ScoopButton extends Button {
     constructor(x, y, w, h) {
         super(["Ore scoop: off", "Ore scoop: on", "Ore scoop: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
+            [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
             2, x, y, w, h, ScoopButton.click);
     }
     static click() {
@@ -310,6 +316,7 @@ class LSIButton extends Button {
     constructor(x, y, w, h) {
         super(["LSI: off", "LSI: on"],
             [config.color_btn_inactive, config.color_btn_active],
+            [config.color_btn_inactive_fg, config.color_btn_active_fg],
             0, x, y, w, h, LSIButton.click);
     }
     static click() {
@@ -321,6 +328,7 @@ class FlyingButton extends Button {
     constructor(x, y, w, h, ship) {
         super(["On ground", "Flying"],
             [config.color_btn_inactive, config.color_btn_active],
+            [config.color_btn_inactive_fg, config.color_btn_active_fg],
             0, x, y, w, h, null, new ShipFlyingStateFetcher(ship));
     }
 }; // class LSIButton
@@ -330,6 +338,7 @@ class OreDetectorButton extends Button {
     constructor(x, y, w, h) {
         super(["Ore detector: off", "Ore detector: on", "Ore detector: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
+            [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
             2, x, y, w, h, OreDetectorButton.click);
     }
     static click() {
@@ -341,6 +350,7 @@ class PortMapButton extends Button {
     constructor(x, y, w, h) {
         super(["Port map: off", "Port map: on", "Port map: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
+            [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
             2, x, y, w, h, PortMapButton.click);
     }
     static click() {
@@ -350,7 +360,7 @@ class PortMapButton extends Button {
 // --------------------------------------------------------------------
 class LiveStatusButton extends Button {
     constructor(x, y, w, h) {
-        super(["Status"], [config.color_btn_none], 
+        super(["Status"], [config.color_btn_none], [config.color_btn_none_fg], 
             0, x, y, w, h, PortMapButton.click);
     }
     static click() {
@@ -395,9 +405,19 @@ class PortMap extends ResourceMap {
 
 // --------------------------------------------------------------------
 class LiveStatus {
-    constructor() {
+    constructor(x, y, w, h) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.message = "Welcome.";
     }
-    draw(ctx) {
+    set_status(status) {
+        this.message = status;
+    }
+    draw(gfx) {
+        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, config.gauge_border, config.gauge_border, config.color_status_bg, config.color_sky); 
+        gfx.draw_text(this.x + config.gauge_border *1.5, this.y + config.gauge_border *2.0, this.message, config.color_status_fg);
     }
 }; // class LiveStatus
 
@@ -659,12 +679,16 @@ class Ship extends MassiveObject {
         return fuel;
     }
     set_bot_thrust(on) {
-        if (on) this.flying = true;
+        if (on) this.liftoff();
         this.bot_thrust = on ? config.ship_bot_thrust : 0;
     }
     set_side_thrust(left, on) {
         if (!this.flying) return;
         this.side_thrust = !on ? 0 : left ? -config.ship_side_thrust : config.ship_side_thrust;
+    }
+    liftoff() {
+        Game._set_status("Lift-off!");
+        this.flying = true;
     }
     land() {
         this.bot_thrust = this.side_thrust = 0;
@@ -788,6 +812,9 @@ class Dash {
         this.port_map = new PortMap(p4x, p3y2, p4w, b3h);
         this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h);
     }
+    set_status(status) {
+        this.live_status.set_status(status);
+    }
     click(e) {
         const x = 0; ///FIIXMEE
         const y = 0;
@@ -832,7 +859,7 @@ class Game {
 this.ship.add_fuel(this.ship.max_fuel/3);
         this.dash = new Dash(0, dash_y, cw, dash_h, this.ship);
         this.view = new LiveView(0, view_y, cw, view_h, this.ship);
-        this.msg = null;
+        this.status = null;
     }
     run() {
         const time = now();
@@ -859,11 +886,17 @@ this.ship.add_fuel(this.ship.max_fuel/3);
             }
         }
     }
+    set_status(status) {
+        this.dash.set_status(status);
+    }
     draw() {
         this.gfx.clear(config.color_sky);
         this.view.draw(this.gfx);
         this.dash.draw(this.gfx);
         this.draw_message();
+    }
+    static _set_status(status) {
+        if (_game != null) _game.set_status(status);
     }
     static _event_keydown(e) {
         if (_game != null) _game.event_keydown(e);
@@ -898,11 +931,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
             break;
         }
     }
-    message(msg) {
-        this.msg = msg;
-    }
     draw_message() {
-        if (this.msg == null) return;
         ///`
     }
 }; // class Game
