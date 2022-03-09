@@ -22,6 +22,7 @@ var config = {
     max_elev               : 1000,
     max_fuel               : 100,
     meter_per_pix          : 10,
+    min_elev               : 10,
     ore_mass_max           : 1000,
     ore_mass_min           : 8,
     port_screens_per       : 5,
@@ -238,7 +239,7 @@ class ElevationGauge extends Gauge {
 
 // --------------------------------------------------------------------
 class Button {
-    constructor(state_titles, state_colors, state, x, y, w, h, click_handler) {
+    constructor(state_titles, state_colors, state, x, y, w, h, click_handler, state_fetcher) {
         this.x = x;
         this.y = y;
         this.w = w;
@@ -247,6 +248,7 @@ class Button {
         this.state_colors = state_colors;
         this.state = state;
         this.click_handler = click_handler;
+        this.state_fetcher = state_fetcher;
     }
     set_state(state) {
         this.state = state;
@@ -258,6 +260,8 @@ class Button {
         this.click_handler.click();
     }
     draw(gfx) {
+        if (this.state_fetcher != null)
+            this.state = this.state_fetcher.button_state();
         let bb = config.button_border;
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, bb, bb, this.state_colors[this.state], config.color_sky);
         //let cy = this.y + this.h/2; // FIXME
@@ -314,10 +318,10 @@ class LSIButton extends Button {
 
 // --------------------------------------------------------------------
 class FlyingButton extends Button {
-    constructor(x, y, w, h) {
+    constructor(x, y, w, h, ship) {
         super(["On ground", "Flying"],
             [config.color_btn_inactive, config.color_btn_active],
-            0, x, y, w, h, null);
+            0, x, y, w, h, null, new ShipFlyingStateFetcher(ship));
     }
 }; // class LSIButton
 
@@ -406,13 +410,14 @@ class Terrain {
         this.h = h;
         this.peaks = [];
     }
-    extend(spos, epos) {
+    extend(sxpos, expos) {
+        //@@FIXME
         if (this.peaks.length == 0);
             this.peaks.push(0);
         let elev = this.peaks[this.peaks.length-1];
-        while (this.peaks.length < epos) {
+        while (this.peaks.length * config.terr_step < expos) {
             elev += (Math.random() * config.terr_step) - (config.terr_step/2);
-            if (elev < 0) elev = 0;
+            if (elev < config.min_elev) elev = config.min_elev;
             this.peaks.push(elev);
         }
     }
@@ -420,20 +425,20 @@ class Terrain {
         this.extend(n-100, n+100); // FIXME
         return this.peaks[n];
     }
-    index(pos) {
-        return Math.floor(pos / config.terr_step);
+    index(xpos) {
+        return Math.floor(xpos / config.terr_step);
     }
-    elevation(pos) {
-        this.extend(pos, pos);
+    elevation(xpos) {
+        this.extend(xpos, xpos);
 /*<<<*/
 /*<<<*/ const lo = 0;
 /*<<<*/
-        const pi = this.index(pos);
+        const pi = this.index(xpos);
         let elev = this.peaks[pi];
         // FIXME interpolate
         return elev;
     }
-    draw(gfx, pos) {
+    draw(gfx, xpos) {
         if (this.peaks.length == 0) return;
         const ctx = gfx.ctx;
         ctx.fillStyle = config.color_terrain.jstring();
@@ -441,7 +446,7 @@ class Terrain {
         const bot = this.y + this.h;
         let xlast = this.x;
         ctx.moveTo(this.x, bot);
-        for (let pi = this.index(pos); pi < this.peaks.length; ++pi) {
+        for (let pi = this.index(xpos); pi < this.peaks.length; ++pi) {
             ////const x = this.x + pi * config.view_xstep_m / config.meter_per_pix;
             const x = this.x + pi * config.terr_step;
             if (x >= gfx.ctx.canvas.width) break;
@@ -465,26 +470,26 @@ class LandObjects {
         this.screens_per = screens_per;
         this.resources = [];
     }
-    place(pos, thing) {
+    place(xpos, thing) {
         const mag = 10;
         return (randu(this.screens_per * this.w * mag) < mag);
     }
-    index(pos) {
+    index(xpos) {
         for (let i = 0; i < this.resources.length; ++i) {
-            if (this.resources[i].pos > pos)
+            if (this.resources[i].xpos > xpos)
                 return (i == 0) ? 0 : i-1;
         }
         return this.resources.length-1;
     }
-    draw(gfx, pos) {
+    draw(gfx, xpos) {
         if (this.resources.length == 0) return;
-        for (let pi = this.index(pos); pi < this.resources.length; ++pi) {
-            ///const x = this.x + (this.resources[pi].pos - pos);
+        for (let pi = this.index(xpos); pi < this.resources.length; ++pi) {
+            ///const x = this.x + (this.resources[pi].xpos - xpos);
             const x1 = this.x;
-            const x2 = this.resources[pi].pos;
-            const x = x1 + (x2 - pos);
+            const x2 = this.resources[pi].xpos;
+            const x = x1 + (x2 - xpos);
             if (x >= gfx.ctx.canvas.width) break;
-            const y = this.y - this.terrain.elevation(this.resources[pi].pos);
+            const y = this.y - this.terrain.elevation(this.resources[pi].xpos);
             if (y >= 0)
                 this.resources[pi].draw(gfx, x, y);
         }
@@ -496,10 +501,10 @@ class Ports extends LandObjects {
     constructor(x, y, w, h, terrain) {
         super(x, y, w, h, terrain, config.port_screens_per);
     }
-    extend(spos, epos) {
-        for (let pos = spos; pos < epos; ++pos) {
-            if (this.place(pos))
-                this.resources.push(new Port(pos));
+    extend(sxpos, expos) {
+        for (let xpos = sxpos; xpos < expos; ++xpos) {
+            if (this.place(xpos))
+                this.resources.push(new Port(xpos));
         }
     }
 }; // class Ports
@@ -509,24 +514,24 @@ class OreDeposits extends LandObjects {
     constructor(x, y, w, h, terrain) {
         super(x, y, w, h, terrain, config.deposit_screens_per);
     }
-    extend(spos, epos) {
-        for (let pos = spos; pos < epos; ++pos) {
-            if (this.place(pos))
-                this.resources.push(new OreDeposit(this.ore_mass(pos), pos));
+    extend(sxpos, expos) {
+        for (let xpos = sxpos; xpos < expos; ++xpos) {
+            if (this.place(xpos))
+                this.resources.push(new OreDeposit(this.ore_mass(xpos), xpos));
         }
     }
-    ore_mass(pos) {
+    ore_mass(xpos) {
         const M = config.ore_mass_max;
-        const k = nhash(pos) % M;
+        const k = nhash(xpos) % M;
         return config.ore_mass_min + Math.floor((k*k*k) / (M*M));
     }
 }; // class OreDeposits
 
 // --------------------------------------------------------------------
 class OreDeposit {
-    constructor(mass, pos) {
+    constructor(mass, xpos) {
         this.mass = mass;
-        this.pos = pos;
+        this.xpos = xpos;
     }
     draw(gfx, x, y) {
         const r = Math.sqrt(this.mass) * .1; // FIXME
@@ -542,8 +547,8 @@ class Billboard {
 
 // --------------------------------------------------------------------
 class Port {
-    constructor(pos) {
-        this.pos = pos;
+    constructor(xpos) {
+        this.xpos = xpos;
         this.name = "Omega Station";
     }
     draw(gfx, x, y) {
@@ -564,18 +569,18 @@ class LiveView {
         this.ports = new Ports(x, y, w, h, this.terrain);
         this.deposits = new OreDeposits(x, y, w, h, this.terrain);
     }
-    extend(spos, epos) { // this is weird
-        this.terrain.extend(spos, epos);
-        this.ports.extend(spos, epos);
-        this.deposits.extend(spos, epos);
+    extend(sxpos, expos) { // this is weird
+        this.terrain.extend(sxpos, expos);
+        this.ports.extend(sxpos, expos);
+        this.deposits.extend(sxpos, expos);
     }
     draw(gfx) {
-        const pos = this.ship.loc.x - this.w/2;
-        this.extend(pos, pos + this.w);
-        this.deposits.draw(gfx, pos);
-        this.terrain.draw(gfx, pos);
-        this.ports.draw(gfx, pos);
-        this.ship.draw(gfx, pos);
+        const xpos = this.ship.loc.x - this.w/2;
+        this.extend(xpos, xpos + this.w);
+        this.deposits.draw(gfx, xpos);
+        this.terrain.draw(gfx, xpos);
+        this.ports.draw(gfx, xpos);
+        this.ship.draw(gfx, xpos);
     }
 }; // class LiveView
 
@@ -602,9 +607,9 @@ class Loan {
 
 // --------------------------------------------------------------------
 class MassiveObject {
-    constructor(mass, pos, elev, time) {
+    constructor(mass, xpos, ypos, time) {
         this.mass = mass;
-        this.loc = new Vector(pos, elev);
+        this.loc = new Vector(xpos, ypos);
         this.vel = new Vector(0,0);
         this.acc = new Vector(0,0);
         this.time = time;
@@ -625,8 +630,8 @@ class MassiveObject {
 
 // --------------------------------------------------------------------
 class Ship extends MassiveObject {
-    constructor(pos, elev) {
-        super(config.ship_mass, pos, elev, now());
+    constructor(xpos, ypos) {
+        super(config.ship_mass, xpos, ypos, now());
         this.bot_thrust = 0;
         this.side_thrust = 0;
         this.cargo = 0;
@@ -682,10 +687,11 @@ class Ship extends MassiveObject {
         }
         this.accelerate(this.bot_thrust, this.side_thrust);
     }
-    draw(gfx, pos) {
-        const r = gfx.ctx.canvas.width * 0.01;
-        const x = this.loc.x - pos;
-        const y = this.loc.y;
+    draw(gfx, xpos) {
+        const canvas = gfx.ctx.canvas;
+        const r = canvas.width * 0.01;
+        const x = this.loc.x - xpos;
+        const y = canvas.height - this.loc.y;
         this.draw_body(gfx, x, y, r);
         if (this.bot_thrust > 0) this.draw_bot_thrust(gfx, x, y, r);
         if (this.side_thrust > 0) this.draw_right_thrust(gfx, x, y, r);
@@ -740,6 +746,11 @@ class ShipCargoFetcher {
     gauge_value() { return this.ship.cargo; }
 };
 
+class ShipFlyingStateFetcher {
+    constructor(ship) { this.ship = ship; }
+    button_state() { return this.ship.flying ? 1 : 0; }
+};
+
 // --------------------------------------------------------------------
 class Dash {
     constructor(x, y, w, h, ship) {
@@ -769,7 +780,7 @@ class Dash {
         this.fuel_gauge = new FuelGauge(p2x+2*(gw+b), y+b, gw, gh, ship);
         this.scoop_btn = new ScoopButton(p3x, y+b, b3w, b3h);
         this.lsi_btn = new LSIButton(p3x, p3y2, b3w, b3h);
-        this.fly_btn = new FlyingButton(p3x, p3y3, b3w, b3h);
+        this.fly_btn = new FlyingButton(p3x, p3y3, b3w, b3h, ship);
         this.ore_detector_btn = new OreDetectorButton(p3x2, y+b, b3w, b3h);
         this.port_map_btn = new PortMapButton(p3x2, p3y2, b3w, b3h);
         this.live_status_btn = new LiveStatusButton(p3x2, p3y3, b3w, b3h);
@@ -817,7 +828,7 @@ class Game {
         const space = Math.floor(ch*.01);
         const view_y = dash_y + dash_h + space;
         const view_h = ch - view_y;
-        this.ship = new Ship(1000, 0);
+        this.ship = new Ship(1000, config.min_elev);
 this.ship.add_fuel(this.ship.max_fuel/3);
         this.dash = new Dash(0, dash_y, cw, dash_h, this.ship);
         this.view = new LiveView(0, view_y, cw, view_h, this.ship);
