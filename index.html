@@ -667,7 +667,11 @@ class Loan {
 
 // --------------------------------------------------------------------
 class MassiveObject {
-    constructor(mass, xpos, ypos, time) {
+    constructor(x, y, w, h, xpos, ypos, mass, time) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
         this.mass = mass;
         this.loc = new Vector(xpos, ypos);
         this.vel = new Vector(0,0);
@@ -695,8 +699,8 @@ class MassiveObject {
 
 // --------------------------------------------------------------------
 class Ship extends MassiveObject {
-    constructor(xpos, ypos) {
-        super(config.ship_mass, xpos, ypos, now());
+    constructor(x, y, w, h, xpos, ypos) {
+        super(x, y, w, h, xpos, ypos, config.ship_mass, now());
         this.bot_thrust = 0;
         this.side_thrust = 0;
         this.cargo = 0;
@@ -771,10 +775,9 @@ class Ship extends MassiveObject {
         Game._set_status(msg); // FIXME
     }
     draw(gfx, xpos) {
-        const canvas = gfx.ctx.canvas;
-        const x = this.loc.x - xpos;
-        const y = canvas.height - this.loc.y;
-        const r = canvas.width * 0.02;
+        const x = this.x + this.loc.x - xpos;
+        const y = this.y + this.h - this.loc.y;
+        const r = this.w * 0.02;
         this.draw_body(gfx, x, y, r);
         if (this.bot_thrust > 0) this.draw_bot_thrust(gfx, x, y, r);
         if (this.side_thrust < 0) this.draw_side_thrust(gfx, x, y, r, false);
@@ -919,17 +922,18 @@ class Game {
         const canvas = gfx.ctx.canvas;
         const cw = canvas.width;
         const ch = canvas.height;
-        const dash_y = Math.floor(ch*.04);
-        const dash_h = Math.floor(ch*.30);
         const space = Math.floor(ch*.01);
-        const view_y = dash_y + dash_h + space;
-        const view_h = ch - view_y;
+        const dash_h = Math.floor(ch*.30);
+        const dash_y = ch - dash_h;
+        const view_y = 0;
+        const view_h = dash_y - space - view_y;
+
         this.terrain = new Terrain(0, view_y, cw, view_h);
         this.ports = new Ports(0, view_y, cw, view_h, this.terrain);
         this.deposits = new OreDeposits(0, view_y, cw, view_h, this.terrain);
         const shipxpos = 1000; // FIXME
         const shipypos = this.terrain.elevation(shipxpos);
-        this.ship = new Ship(shipxpos, shipypos);
+        this.ship = new Ship(0, view_y, cw, view_h, shipxpos, shipypos);
 this.ship.add_fuel(this.ship.max_fuel/3);
         this.dash = new Dash(0, dash_y, cw, dash_h, this.ship, this.terrain);
         this.view = new LiveView(0, view_y, cw, view_h, this.ship, this.terrain, this.ports, this.deposits);
