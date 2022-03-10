@@ -18,9 +18,10 @@ var config = {
     crit_fuel              : 2,
     deposit_dig_max_dist   : 10,
     deposit_screens_per    : 1,
-    fuel_per_thrust        : 0.01,
+    fuel_per_thrust        : 100,
     gauge_border           : 3,
     gravity                : 0.002,
+    liftoff_vel            : 0.02,
     low_fuel               : 10,
     max_fuel               : 100,
     min_elev               : 10,
@@ -28,7 +29,7 @@ var config = {
     ore_mass_min           : 8,
     port_screens_per       : 5,
     port_land_max_dist     : 10,
-    ship_bot_thrust        : 0.01,
+    ship_bot_thrust        : 0.004,
     ship_mass              : 50,
     ship_max_cargo         : 500,
     ship_side_thrust       : 0.01,
@@ -248,13 +249,13 @@ class OreGauge extends Gauge {
 // --------------------------------------------------------------------
 class AltitudeGauge extends Gauge {
     constructor(x, y, w, h, ship, terrain) {
-        super(x, y, w, h, "Alt.", config.color_terrain, terrain.max_elev, 100, 30, new ShipAltitudeFetcher(ship, terrain));
+        super(x, y, w, h, "Alt.", config.color_terrain, terrain.max_elev, -1, -1, new ShipAltitudeFetcher(ship, terrain));
     }
 }; // class AltitudeGauge
 
 // --------------------------------------------------------------------
 class Button {
-    constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, key_handler = null, state_fetcher = null) {
+    constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, state_fetcher = null) {
         this.x = x;
         this.y = y;
         this.w = w;
@@ -263,7 +264,6 @@ class Button {
         this.state_colors = state_colors;
         this.state_colors_fg = state_colors_fg;
         this.state = state;
-        this.key_handler = key_handler;
         this.state_fetcher = state_fetcher;
     }
     set_state(state) {
@@ -273,7 +273,8 @@ class Button {
         return x >= this.x && x < this.x + this.w && y >= this.y && y < this.y + this.h;
     }
     keystroke(down) {
-        this.key_handler.keystroke(down);
+    }
+    click(down) {
     }
     draw(gfx) {
         if (this.state_fetcher != null)
@@ -316,9 +317,10 @@ class ScoopButton extends Button {
         super(["Ore scoop: off", "Ore scoop: on", "Ore scoop: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
-            2, x, y, w, h, ScoopButton.keystroke);
+            2, x, y, w, h);
     }
-    static keystroke(down) {
+    click(down) {
+        if (!down) return;
     }
 }; // class ScoopButton
 
@@ -328,10 +330,11 @@ class LSIButton extends Button {
         super(["LSI: off", "LSI: on"],
             [config.color_btn_inactive, config.color_btn_active],
             [config.color_btn_inactive_fg, config.color_btn_active_fg],
-            0, x, y, w, h, LSIButton.keystroke);
+            0, x, y, w, h);
     }
-    static keystroke(down) {
-        this.set_state(!this.state);
+    click(down) {
+        if (!down) return;
+        this.set_state((this.state == 0) ? 1 : 0);
     }
 }; // class LSIButton
 
@@ -341,7 +344,7 @@ class FlyingButton extends Button {
         super(["On ground", "Flying"],
             [config.color_btn_inactive, config.color_btn_active],
             [config.color_btn_inactive_fg, config.color_btn_active_fg],
-            0, x, y, w, h, null, new ShipFlyingStateFetcher(ship));
+            0, x, y, w, h, new ShipFlyingStateFetcher(ship));
     }
 }; // class LSIButton
 
@@ -351,9 +354,10 @@ class OreDetectorButton extends Button {
         super(["Ore detector: off", "Ore detector: on", "Ore detector: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
-            2, x, y, w, h, OreDetectorButton.keystroke);
+            2, x, y, w, h);
     }
-    static keystroke() {
+    static click(down) {
+        if (!down) return;
     }
 }; // class OreDetectorButton
 
@@ -363,9 +367,10 @@ class PortMapButton extends Button {
         super(["Port map: off", "Port map: on", "Port map: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
-            2, x, y, w, h, PortMapButton.keystroke);
+            2, x, y, w, h);
     }
-    static keystroke() {
+    static click(down) {
+        if (!down) return;
     }
 }; // class PortMapButton
 
@@ -381,9 +386,10 @@ class LiveStatusButton extends Button {
 class SouthButton extends Button {
     constructor(x, y, w, h) {
         super(["UP"], [config.color_btn_dir], [config.color_btn_dir_fg],
-            0, x, y, x, h, SouthButton.keystroke, SouthButton.keyup);
+            0, x, y, x, h);
     }
-    static keystroke(down) {
+    click(down) {
+        if (!down) return;
         if (_game != null) _game.keystroke("ArrowDown", down);
     }
 }; // class SouthButton
@@ -534,7 +540,7 @@ class LandObjects {
     closest(xpos) {
         if (this.objects.length == 0) return null;
         let i = this.index(xpos);
-        if (i >= this.objects.length-1 ||
+        if (i < this.objects.length-1 &&
             Math.abs(this.objects[i].xpos - xpos) > Math.abs(this.objects[i+1].xpos - xpos))
             ++i;
         return this.objects[i];
@@ -587,8 +593,9 @@ class OreDeposits extends LandObjects {
         this.e_extend = expos;
     }
     ore_mass(xpos) {
-        const M = config.ore_mass_max;
+        const M = config.ore_mass_max - config.ore_mass_min;
         const k = nhash(xpos) % M;
+return config.ore_mass_min + k;
         return config.ore_mass_min + Math.floor((k*k*k) / (M*M));
     }
 }; // class OreDeposits
@@ -600,6 +607,7 @@ class OreDeposit {
         this.xpos = xpos;
     }
     draw(gfx, x, y) {
+        if (this.mass == 0) return;
         const r = Math.sqrt(this.mass) * 1.5; // FIXME
         gfx.draw_circle(x, y, r, config.color_ore);
     }
@@ -728,7 +736,7 @@ class Ship extends MassiveObject {
         return fuel;
     }
     set_bot_thrust(on) {
-        if (on) this.liftoff();
+        if (!this.flying && on) this.liftoff();
         this.bot_thrust = on ? config.ship_bot_thrust : 0;
     }
     set_side_thrust(left, on) {
@@ -737,6 +745,7 @@ class Ship extends MassiveObject {
     }
     liftoff() {
         this.flying = true;
+        this.vel.y = config.liftoff_vel;
         this.set_status("Lift-off!");
     }
     land(terrain) {
@@ -756,13 +765,13 @@ class Ship extends MassiveObject {
             return;
         if (Math.abs(deposit.xpos - this.xpos) > config.deposit_dig_max_dist)
             return;
-        const loaded = this.load_ore(deposits.mass);
-        deposits.mass -= loaded;
+        const loaded = this.load_ore(deposit.mass);
+        deposit.mass -= loaded;
     }
     update(time) {
         const dt = time - this.time;
         super.update(time);
-        const fuel_used = (this.bot_thrust + Math.abs(this.side_thrust)) * config.fuel_per_thrust;
+        const fuel_used = (this.bot_thrust + Math.abs(this.side_thrust)) * config.fuel_per_thrust * dt;
         this.fuel -= fuel_used;
         if (this.fuel < 0) {
             this.fuel = 0;
@@ -787,10 +796,12 @@ class Ship extends MassiveObject {
         const ctx = gfx.ctx;
         ctx.fillStyle = config.color_ship.jstring();
         ctx.beginPath();
-        ctx.moveTo(x, y-r);
-        ctx.lineTo(x-r/2, y+r);
-        ctx.lineTo(x, y+r/2);
-        ctx.lineTo(x+r/2, y+r);
+        const H = r*.2;
+        const W = r*.4;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x-W, y+H);
+        ctx.lineTo(x, y-r);
+        ctx.lineTo(x+W, y+H);
         ctx.fill();
     }
     draw_bot_thrust(gfx, x, y, r) {
@@ -798,8 +809,8 @@ class Ship extends MassiveObject {
         ctx.fillStyle = config.color_thrust.jstring();
         ctx.beginPath();
         const W = r*.2;
-        const L = r*2.5;
-        const D = r*1.1;
+        const L = r*1.7;
+        const D = r*0.1;
         ctx.moveTo(x+W, y+D);
         ctx.lineTo(x, y+L); // tail
         ctx.lineTo(x-W, y+D);
@@ -811,8 +822,9 @@ class Ship extends MassiveObject {
         ctx.beginPath();
         var W = r*.15;
         var L = r*2.0;
-        var D = r*0.7;
+        var D = r*0.5;
         if (left) { D = -D; L = -L; }
+        y -= r*.05;
         ctx.moveTo(x+D, y-W);
         ctx.lineTo(x+L, y); // tail
         ctx.lineTo(x+D, y+W);
@@ -882,16 +894,16 @@ this.dir_north_btn = this.dir_south_btn = this.dir_right_btn = this.dir_left_btn
         this.live_status.set_status(status);
     }
     mouse(down, x, y) {
-        if (this.scoop_btn.inside(x,y)) this.scoop_btn.keystroke(down, x,y);
-        if (this.lsi_btn.inside(x,y)) this.lsi_btn.keystroke(down, x,y);
-        //if (this.fly_btn.inside(x,y)) this.fly_btn.keystroke(down, x,y);
-        if (this.ore_detector_btn.inside(x,y)) this.ore_detector_btn.keystroke(down, x,y);
-        if (this.port_map_btn.inside(x,y)) this.port_map_btn.keystroke(down, x,y);
-        if (this.live_status_btn.inside(x,y)) this.live_status_btn.keystroke(down, x,y);
-        if (this.dir_north_btn != null && this.dir_north_btn.inside(x,y)) this.dir_north_btn.keystroke(down, x,y);
-        if (this.dir_south_btn != null && this.dir_south_btn.inside(x,y)) this.dir_south_btn.keystroke(down, x,y);
-        if (this.dir_left_btn != null && this.dir_left_btn.inside(x,y)) this.dir_left_btn.keystroke(down, x,y);
-        if (this.dir_right_btn != null && this.dir_right_btn.inside(x,y)) this.dir_right_btn.keystroke(down, x,y);
+        if (this.scoop_btn.inside(x,y)) this.scoop_btn.click(down);
+        if (this.lsi_btn.inside(x,y)) this.lsi_btn.click(down);
+        //if (this.fly_btn.inside(x,y)) this.fly_btn.click(down);
+        if (this.ore_detector_btn.inside(x,y)) this.ore_detector_btn.click(down);
+        if (this.port_map_btn.inside(x,y)) this.port_map_btn.click(down);
+        if (this.live_status_btn.inside(x,y)) this.live_status_btn.click(down);
+        if (this.dir_north_btn != null && this.dir_north_btn.inside(x,y)) this.dir_north_btn.click(down);
+        if (this.dir_south_btn != null && this.dir_south_btn.inside(x,y)) this.dir_south_btn.click(down);
+        if (this.dir_left_btn != null && this.dir_left_btn.inside(x,y)) this.dir_left_btn.click(down);
+        if (this.dir_right_btn != null && this.dir_right_btn.inside(x,y)) this.dir_right_btn.click(down);
     }
     draw(gfx) {
         gfx.draw_rect(this.x, this.y, this.w, this.h, config.color_dash_bg);
@@ -1046,7 +1058,8 @@ function main() {
     _game = new Game(gfx);
     document.addEventListener('keyup',   Game._event_keyup);
     document.addEventListener('keydown', Game._event_keydown);
-    document.addEventListener('click',   Game._event_click);
+    document.addEventListener('mousedown',   Game._event_mousedown);
+    document.addEventListener('mouseup',   Game._event_mouseup);
     window.addEventListener('resize', canvas_resize, false);
     run_game();
 }
