@@ -14,13 +14,14 @@ var _game = null;
 
 var config = {
     button_border          : 3,
-    crash_vel2             : 99999999,
+    crash_vel2             : .04,
     crit_fuel              : 2,
     deposit_dig_max_dist   : 10,
     deposit_screens_per    : 1,
-    fuel_per_thrust        : 100,
+    fuel_per_thrust        : .04,
     gauge_border           : 3,
     gravity                : 0.002,
+    liftoff_fuel           : 1,
     liftoff_vel            : 0.02,
     low_fuel               : 10,
     max_fuel               : 100,
@@ -31,7 +32,7 @@ var config = {
     port_land_max_dist     : 10,
     ship_bot_thrust        : 0.004,
     ship_mass              : 50,
-    ship_max_cargo         : 500,
+    ship_max_cargo         : 200,
     ship_side_thrust       : 0.01,
     terr_base              : 24, // pixels
     terr_step              : 24, // pixels
@@ -52,9 +53,12 @@ var config = {
     color_gauge_bg         : "e0e0e0",
     color_gauge_border     : "a098b0",
     color_gauge_crit       : "ff1010",
-    color_gauge_low        : "d09000",
+    color_gauge_low        : "a06000",
     color_gauge_text       : "000000",
     color_gauge_title      : "000000",
+    color_msg_bg           : "c0c0c0",
+    color_msg_fg           : "000000",
+    color_msg_border       : "ff0000",
     color_ore              : "d4af37",
     color_port             : "ff0000",
     color_resmap_bg        : "a8a818",
@@ -596,7 +600,7 @@ class OreDeposits extends LandObjects {
         const M = config.ore_mass_max - config.ore_mass_min;
         const k = nhash(xpos) % M;
 return config.ore_mass_min + k;
-        return config.ore_mass_min + Math.floor((k*k*k) / (M*M));
+        //return config.ore_mass_min + Math.floor((k*k*k) / (M*M));
     }
 }; // class OreDeposits
 
@@ -735,6 +739,13 @@ class Ship extends MassiveObject {
         this.fuel += fuel;
         return fuel;
     }
+    use_fuel(fuel) {
+        this.fuel -= fuel;
+        if (this.fuel < 0) {
+            this.fuel = 0;
+            Game._game_over("Your ship ran out of fuel!");
+        }
+    }
     set_bot_thrust(on) {
         if (!this.flying && on) this.liftoff();
         this.bot_thrust = on ? config.ship_bot_thrust : 0;
@@ -746,6 +757,7 @@ class Ship extends MassiveObject {
     liftoff() {
         this.flying = true;
         this.vel.y = config.liftoff_vel;
+        this.use_fuel(config.liftoff_fuel);
         this.set_status("Lift-off!");
     }
     land(terrain) {
@@ -760,23 +772,27 @@ class Ship extends MassiveObject {
         this.set_status("In port "+port.name+".");
     }
     prospect(deposits) {
-        const deposit = deposits.closest(this.xpos);
+        const loaded = this.prospect1(deposits);
+        if (loaded == 0)
+            this.set_status("No ore deposits found here.");
+        else
+            this.set_status("Loaded "+loaded.toString()+" tons of ore!");
+    }
+    prospect1(deposits) {
+        const deposit = deposits.closest(this.loc.x);
         if (deposit == null)
-            return;
-        if (Math.abs(deposit.xpos - this.xpos) > config.deposit_dig_max_dist)
-            return;
+            return 0;
+        if (Math.abs(deposit.xpos - this.loc.x) > config.deposit_dig_max_dist)
+            return 0;
         const loaded = this.load_ore(deposit.mass);
         deposit.mass -= loaded;
+        return loaded;
     }
     update(time) {
         const dt = time - this.time;
         super.update(time);
         const fuel_used = (this.bot_thrust + Math.abs(this.side_thrust)) * config.fuel_per_thrust * dt;
-        this.fuel -= fuel_used;
-        if (this.fuel < 0) {
-            this.fuel = 0;
-            //game_over("ran out of fuel");
-        }
+        this.use_fuel(fuel_used);
         if (this.flying)
             this.accelerate(this.side_thrust, this.bot_thrust - config.gravity);
     }
@@ -939,7 +955,10 @@ class Game {
         const dash_y = ch - dash_h;
         const view_y = 0;
         const view_h = dash_y - space - view_y;
+        const mb = Math.floor(ch*.25);
 
+        this.playing = true;
+        this.msgrect = { x:mb, y:mb, w:cw-2*mb, h:ch-2*mb };
         this.terrain = new Terrain(0, view_y, cw, view_h);
         this.ports = new Ports(0, view_y, cw, view_h, this.terrain);
         this.deposits = new OreDeposits(0, view_y, cw, view_h, this.terrain);
@@ -950,15 +969,17 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.dash = new Dash(0, dash_y, cw, dash_h, this.ship, this.terrain);
         this.view = new LiveView(0, view_y, cw, view_h, this.ship, this.terrain, this.ports, this.deposits);
         this.status = null;
+        this.message = null;
     }
     run() {
+        if (!this.playing) return;
         const time = now();
         const ship = this.ship;
         const was_flying = ship.flying;
         ship.update(time);
         if (ship.flying && ship.below_terrain(this.terrain)) {
             if (ship.vel.norm2() > config.crash_vel2) {
-                game_over("crashed");
+                this.game_over("You crashed!");
             } else {
                 ship.land(this.terrain);
             }
@@ -971,8 +992,9 @@ this.ship.add_fuel(this.ship.max_fuel/3);
                 const port = this.view.ports.can_land(ship.loc.x);
                 if (port != null)
                     ship.enter_port(port);
-                else
-                    ship.prospect(this.deposits);
+                else {
+                    const loaded = ship.prospect(this.deposits);
+                }
             }
         }
     }
@@ -1006,6 +1028,9 @@ this.ship.add_fuel(this.ship.max_fuel/3);
     static _event_mouseup(e) {
         if (_game != null) _game.event_mouse(false, e.offsetX, e.offsetY);
     }
+    static _game_over(msg) {
+        if (_game != null) _game.game_over(msg);
+    }
     event_keystroke(down, code) {
         this.set_thrust(code, down);
         //this.draw();
@@ -1026,8 +1051,18 @@ this.ship.add_fuel(this.ship.max_fuel/3);
             break;
         }
     }
+    game_over(msg) {
+        this.message = "Game over: "+msg;
+        this.draw();
+        this.playing = false;
+    }
     draw_message() {
-        ///`
+        if (this.message == null) return;
+        const b = 5;
+        this.gfx.draw_outlined_rect(this.msgrect.x, this.msgrect.y, this.msgrect.w, this.msgrect.h, b, b, config.color_msg_bg, config.color_msg_border);
+        const text_size = this.gfx.measure_text(this.message);
+        const y = this.msgrect.y + (this.msgrect.h - text_size.height) / 2;
+        this.gfx.draw_centered_text(this.msgrect.x, y, this.msgrect.w, this.message, config.color_msg_fg);
     }
 }; // class Game
 
