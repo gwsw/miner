@@ -772,20 +772,19 @@ class Ship extends MassiveObject {
         this.set_status("In port "+port.name+".");
     }
     prospect(deposits) {
-        const loaded = this.prospect1(deposits);
-        if (loaded == 0)
-            this.set_status("No ore deposits found here.");
-        else
-            this.set_status("Loaded "+loaded.toString()+" tons of ore!");
-    }
-    prospect1(deposits) {
         const deposit = deposits.closest(this.loc.x);
-        if (deposit == null)
+        if (deposit == null || Math.abs(deposit.xpos - this.loc.x) > config.deposit_dig_max_dist) {
+            this.set_status("No ore deposits found here.");
             return 0;
-        if (Math.abs(deposit.xpos - this.loc.x) > config.deposit_dig_max_dist)
-            return 0;
+        }
         const loaded = this.load_ore(deposit.mass);
         deposit.mass -= loaded;
+        if (deposit.mass == 0)
+            this.set_status("Loaded "+loaded.toString()+" tons of ore!");
+        else if (loaded == 0)
+            this.set_status("Ship is full; cannot load any more ore.");
+        else
+            this.set_status("Loaded "+loaded.toString()+" tons of ore. Leaving "+deposit.mass.toString()+" tons because ship is full.");
         return loaded;
     }
     update(time) {
