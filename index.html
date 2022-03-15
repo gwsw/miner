@@ -84,13 +84,6 @@ class Color {
     get_comp(comp) {
         return parseInt(this.hex_str.substr(comp*2, 2), 16);
     }
-    adj(comp, incr) {
-        let val = this.get_comp(comp) + incr;
-        if (val < 0) val = 0;
-        if (val > 255) val = 255;
-        const ci = comp*2;
-        return new Color(this.hex_str.substr(0,ci) + hex2(val) + this.hex_str.substr(ci+2));
-    }
     darker(mult) {
         return new Color(hex2(this.get_comp(0)*mult) + hex2(this.get_comp(1)*mult) + hex2(this.get_comp(2)*mult));
     }
@@ -290,6 +283,24 @@ class Button {
         gfx.draw_centered_text(this.x, cy, this.w, this.state_titles[this.state], this.state_colors_fg[this.state]);
     }
 }; // class Button
+
+// --------------------------------------------------------------------
+class ButtonSet {
+    constructor() {
+        this.set = [];
+    }
+    add(btn) {
+        this.set.push(btn);
+    }
+    mouse(down, x, y) {
+        for (const btn of this.set) {
+            if (btn.inside(x, y)) {
+                btn.click(down);
+                break;
+            }
+        }
+    }
+}; // class ButtonSet
 
 // --------------------------------------------------------------------
 class Menu {
@@ -552,10 +563,7 @@ class LandObjects {
     draw(gfx, xpos) {
         if (this.objects.length == 0) return;
         for (let pi = this.index(xpos); pi < this.objects.length; ++pi) {
-            ///const x = this.x + (this.objects[pi].xpos - xpos);
-            const x1 = this.x;
-            const x2 = this.objects[pi].xpos;
-            const x = x1 + (x2 - xpos);
+            const x = this.x + (this.objects[pi].xpos - xpos);
             if (x >= gfx.ctx.canvas.width) break;
             const y = this.y + this.h - this.terrain.elevation(this.objects[pi].xpos);
             this.objects[pi].draw(gfx, x, y);
@@ -569,10 +577,13 @@ class Ports extends LandObjects {
         super(x, y, w, h, terrain, config.port_screens_per);
     }
     cover(sxpos, expos) {
-        for (let xpos = sxpos; xpos < expos; ++xpos) {
-            //if (this.place(xpos))
-            //    this.objects.push(new Port(xpos));
+        if (this.s_extend <= sxpos && expos <= this.e_extend) return;
+        let xpos = this.e_extend;
+        for (; xpos < expos; ++xpos) {
+            if (this.place(xpos))
+                this.objects.push(new Port(xpos));
         }
+        this.e_extend = expos;
     }
     can_land(xpos) {
         const port = this.closest(xpos);
@@ -630,8 +641,8 @@ class Port {
         this.name = "Omega Station";
     }
     draw(gfx, x, y) {
-        gfx.draw_rect(x-25, y-10, 50, 20, config.color_port);
-        gfx.draw_text(x, y-20, this.name, config.color_port);
+        gfx.draw_circle(x, y, 30, config.color_port);
+        gfx.draw_text(x-30, y-40, this.name, config.color_port);
     }
 }; // class Port
 
@@ -650,8 +661,8 @@ class LiveView {
     draw(gfx) {
         const xpos = this.ship.loc.x - this.w/2;
         this.deposits.draw(gfx, xpos);
-        this.terrain.draw(gfx, xpos);
         this.ports.draw(gfx, xpos);
+        this.terrain.draw(gfx, xpos);
         this.ship.draw(gfx, xpos);
     }
 }; // class LiveView
@@ -894,50 +905,34 @@ class Dash {
         this.alt_gauge = new AltitudeGauge(p1x, y+b, gw, gh, ship, terrain);
         this.ore_gauge = new OreGauge(p1x+gw+b, y+b, gw, gh, ship);
         this.fuel_gauge = new FuelGauge(p1x+2*(gw+b), y+b, gw, gh, ship);
-        this.scoop_btn = new ScoopButton(p3x, y+b, b3w, b3h);
-        this.lsi_btn = new LSIButton(p3x, p3y2, b3w, b3h);
-        this.fly_btn = new FlyingButton(p3x, p3y3, b3w, b3h, ship);
-        this.ore_detector_btn = new OreDetectorButton(p3x2, y+b, b3w, b3h);
-        this.port_map_btn = new PortMapButton(p3x2, p3y2, b3w, b3h);
-        this.live_status_btn = new LiveStatusButton(p3x2, p3y3, b3w, b3h);
-this.dir_north_btn = this.dir_south_btn = this.dir_right_btn = this.dir_left_btn = null;
         this.ore_detector = new OreDetector(p4x, y+b, p4w, b3h);
         this.port_map = new PortMap(p4x, p3y2, p4w, b3h);
         this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h);
+        this.btns = new ButtonSet();
+        this.btns.add(new ScoopButton(p3x, y+b, b3w, b3h));
+        this.btns.add(new LSIButton(p3x, p3y2, b3w, b3h));
+        this.btns.add(new FlyingButton(p3x, p3y3, b3w, b3h, ship));
+        this.btns.add(new OreDetectorButton(p3x2, y+b, b3w, b3h));
+        this.btns.add(new PortMapButton(p3x2, p3y2, b3w, b3h));
+        this.btns.add(new LiveStatusButton(p3x2, p3y3, b3w, b3h));
     }
     set_status(status) {
         this.live_status.set_status(status);
     }
     mouse(down, x, y) {
-        if (this.scoop_btn.inside(x,y)) this.scoop_btn.click(down);
-        if (this.lsi_btn.inside(x,y)) this.lsi_btn.click(down);
-        //if (this.fly_btn.inside(x,y)) this.fly_btn.click(down);
-        if (this.ore_detector_btn.inside(x,y)) this.ore_detector_btn.click(down);
-        if (this.port_map_btn.inside(x,y)) this.port_map_btn.click(down);
-        if (this.live_status_btn.inside(x,y)) this.live_status_btn.click(down);
-        if (this.dir_north_btn != null && this.dir_north_btn.inside(x,y)) this.dir_north_btn.click(down);
-        if (this.dir_south_btn != null && this.dir_south_btn.inside(x,y)) this.dir_south_btn.click(down);
-        if (this.dir_left_btn != null && this.dir_left_btn.inside(x,y)) this.dir_left_btn.click(down);
-        if (this.dir_right_btn != null && this.dir_right_btn.inside(x,y)) this.dir_right_btn.click(down);
+        this.btns.mouse(down, x, y);
     }
     draw(gfx) {
         gfx.draw_rect(this.x, this.y, this.w, this.h, config.color_dash_bg);
         this.alt_gauge.draw(gfx);
         this.ore_gauge.draw(gfx);
         this.fuel_gauge.draw(gfx);
-        this.scoop_btn.draw(gfx);
-        this.lsi_btn.draw(gfx);
-        this.fly_btn.draw(gfx);
-        this.ore_detector_btn.draw(gfx);
-        this.port_map_btn.draw(gfx);
-        this.live_status_btn.draw(gfx);
         this.ore_detector.draw(gfx);
         this.port_map.draw(gfx);
         this.live_status.draw(gfx);
-        if (this.dir_north_btn != null) this.dir_north_btn.draw(gfx);
-        if (this.dir_south_btn != null) this.dir_south_btn.draw(gfx);
-        if (this.dir_left_btn != null) this.dir_left_btn.draw(gfx);
-        if (this.dir_right_btn != null) this.dir_right_btn.draw(gfx);
+        for (const btn of this.btns.set) {
+            btn.draw(gfx);
+        }
     }
 }; // class Dash
 
@@ -969,6 +964,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.view = new LiveView(0, view_y, cw, view_h, this.ship, this.terrain, this.ports, this.deposits);
         this.status = null;
         this.message = null;
+        this.btn_sets = [ this.dash.btns ];
     }
     run() {
         if (!this.playing) return;
@@ -1035,7 +1031,8 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         //this.draw();
     }
     event_mouse(down, x, y) {
-        this.dash.mouse(down, x, y);
+        if (this.btn_sets.length == 0) return;
+        this.btn_sets[this.btn_sets.length-1].mouse(down, x, y);
     }
     set_thrust(code, on) {
         switch (code) {
