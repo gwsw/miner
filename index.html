@@ -32,6 +32,7 @@ var config = {
     liftoff_vel            : 0.02,
     low_fuel               : 10,
     max_fuel               : 100,
+    menu_border            : 4,
     min_elev               : 10,
     ore_mass_max           : 1000,
     ore_mass_min           : 8,
@@ -66,6 +67,7 @@ var config = {
     color_msg_bg           : "c0c0c0",
     color_msg_fg           : "000000",
     color_msg_border       : "ff0000",
+    color_menu_border      : "000000",
     color_ore              : "d4af37",
     color_port             : "ff0000",
     color_resmap_bg        : "a8a818",
@@ -296,8 +298,9 @@ class Button extends Drawable {
 }; // class Button
 
 // --------------------------------------------------------------------
-class Form {
-    constructor(bg) {
+class Form extends Drawable {
+    constructor(x, y, w, h, bg) {
+        super(x, y, w, h);
         this.bg = bg;
         this.btns = [];
     }
@@ -313,7 +316,7 @@ class Form {
         }
     }
     draw(gfx) {
-        gfx.draw_rect(this.x, this.y, this.w, this.h, config.color_dash_bg);
+        gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
         for (const btn of this.btns) {
             btn.draw(gfx);
         }
@@ -321,18 +324,20 @@ class Form {
 }; // class Form
 
 // --------------------------------------------------------------------
-class Menu {
-    constructor() {
-        this.form = new Form();
+class Menu extends Form {
+    constructor(x, y, w, h) {
+        super(x, y, w, h);
     }
-    add(btn) {
-        this.form.add(btn);
+    draw(gfx) {
+        super.draw(gfx);
+        gfx.draw_outline(this.x, this.y, this.w, this.h, config.menu_border, config.menu_border, config.color_menu_border);
     }
 }; // class Menu
 
 // --------------------------------------------------------------------
-class PortMenu {
-    constructor() {
+class PortMenu extends Menu {
+    constructor(x, y, w, h) {
+        super(x, y, w, h);
     }
 }; // class PortMenu
 
@@ -541,7 +546,7 @@ this.cover(xpos-1000, xpos+1000); // FIXME
 }; // class Terrain
 
 // --------------------------------------------------------------------
-class LandObjects extends Drawable {
+class TerrObjects extends Drawable {
     constructor(x, y, w, h, terrain, screens_per) {
         super(x, y, w, h);
         this.s_extend = 0;
@@ -579,10 +584,10 @@ class LandObjects extends Drawable {
             this.objects[pi].draw(gfx, x, y);
         }
     }
-}; // class LandObjects
+}; // class TerrObjects
 
 // --------------------------------------------------------------------
-class Ports extends LandObjects {
+class Ports extends TerrObjects {
     constructor(x, y, w, h, terrain) {
         super(x, y, w, h, terrain, config.port_screens_per);
     }
@@ -604,7 +609,7 @@ class Ports extends LandObjects {
 }; // class Ports
 
 // --------------------------------------------------------------------
-class OreDeposits extends LandObjects {
+class OreDeposits extends TerrObjects {
     constructor(x, y, w, h, terrain) {
         super(x, y, w, h, terrain, config.deposit_screens_per);
     }
