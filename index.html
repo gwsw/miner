@@ -8,6 +8,13 @@
 <canvas id="canvas" width="1" height="1" style="font-family:Arial"></canvas>
 <script>
 
+
+/** TODO
+* Menu
+* Port menu
+* Allow move left (add stuff to beginning of array)
+**/
+
 // --------------------------------------------------------------------
 // Globals
 var _game = null;
@@ -35,7 +42,7 @@ var config = {
     ship_max_cargo         : 200,
     ship_side_thrust       : 0.01,
     terr_base              : 24, // pixels
-    terr_step              : 24, // pixels
+    terr_step              : 22, // pixels
     view_width_m           : 1500,
     view_xstep_m           : 50,
     ///world_diam             : 1000*1000, // 1000 km
@@ -172,19 +179,26 @@ class Graphics {
 }; // class Graphics
 
 // --------------------------------------------------------------------
+class Drawable {
+    constructor(x, y, w, h) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+    }
+}; // class Drawable
+
+// --------------------------------------------------------------------
 class DashClock {
     constructor() {
     }
 }; // class DashClock
 
 // --------------------------------------------------------------------
-class Gauge {
+class Gauge extends Drawable {
     constructor(x, y, w, h, title, color, max_value, low_value = -1, crit_value = -1, fetcher = null) {
+        super(x, y, w, h);
         this.title = title;
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
         this.color = color;
         this.max_value = max_value;
         this.low_value = low_value;
@@ -251,12 +265,9 @@ class AltitudeGauge extends Gauge {
 }; // class AltitudeGauge
 
 // --------------------------------------------------------------------
-class Button {
+class Button extends Drawable {
     constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, state_fetcher = null) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
+        super(x, y, w, h);
         this.state_titles = state_titles;
         this.state_colors = state_colors;
         this.state_colors_fg = state_colors_fg;
@@ -285,26 +296,37 @@ class Button {
 }; // class Button
 
 // --------------------------------------------------------------------
-class ButtonSet {
-    constructor() {
-        this.set = [];
+class Form {
+    constructor(bg) {
+        this.bg = bg;
+        this.btns = [];
     }
     add(btn) {
-        this.set.push(btn);
+        this.btns.push(btn);
     }
     mouse(down, x, y) {
-        for (const btn of this.set) {
+        for (const btn of this.btns) {
             if (btn.inside(x, y)) {
                 btn.click(down);
                 break;
             }
         }
     }
-}; // class ButtonSet
+    draw(gfx) {
+        gfx.draw_rect(this.x, this.y, this.w, this.h, config.color_dash_bg);
+        for (const btn of this.btns) {
+            btn.draw(gfx);
+        }
+    }
+}; // class Form
 
 // --------------------------------------------------------------------
 class Menu {
     constructor() {
+        this.form = new Form();
+    }
+    add(btn) {
+        this.form.add(btn);
     }
 }; // class Menu
 
@@ -410,12 +432,9 @@ class SouthButton extends Button {
 }; // class SouthButton
 
 // --------------------------------------------------------------------
-class ResourceMap {
+class ResourceMap extends Drawable {
     constructor(x, y, w, h) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
+        super(x, y, w, h);
         this.installed = false;
         this.active = false;
     }
@@ -446,12 +465,9 @@ class PortMap extends ResourceMap {
 }; // class PortMap
 
 // --------------------------------------------------------------------
-class LiveStatus {
+class LiveStatus extends Drawable {
     constructor(x, y, w, h) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
+        super(x, y, w, h);
         this.message = "Welcome.";
     }
     set_status(status) {
@@ -464,12 +480,9 @@ class LiveStatus {
 }; // class LiveStatus
 
 // --------------------------------------------------------------------
-class Terrain {
+class Terrain extends Drawable {
     constructor(x, y, w, h) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
+        super(x, y, w, h);
         this.max_elev = h-20; // FIXME
         this.peaks = [];
     }
@@ -528,12 +541,9 @@ this.cover(xpos-1000, xpos+1000); // FIXME
 }; // class Terrain
 
 // --------------------------------------------------------------------
-class LandObjects {
+class LandObjects extends Drawable {
     constructor(x, y, w, h, terrain, screens_per) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
+        super(x, y, w, h);
         this.s_extend = 0;
         this.e_extend = 0;
         this.terrain = terrain;
@@ -647,12 +657,9 @@ class Port {
 }; // class Port
 
 // --------------------------------------------------------------------
-class LiveView {
+class LiveView extends Drawable {
     constructor(x, y, w, h, ship, terrain, ports, deposits) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
+        super(x, y, w, h);
         this.terrain = terrain;
         this.ports = ports;
         this.deposits = deposits;
@@ -689,12 +696,9 @@ class Loan {
 }; // class Loan
 
 // --------------------------------------------------------------------
-class MassiveObject {
+class MassiveObject extends Drawable {
     constructor(x, y, w, h, xpos, ypos, mass, time) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
+        super(x, y, w, h);
         this.mass = mass;
         this.loc = new Vector(xpos, ypos);
         this.vel = new Vector(0,0);
@@ -879,12 +883,9 @@ class ShipFlyingStateFetcher {
 };
 
 // --------------------------------------------------------------------
-class Dash {
+class Dash extends Drawable {
     constructor(x, y, w, h, ship, terrain) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
+        super(x, y, w, h);
         ///this.ship = ship;
         const b   = w * .01;
         const p1w = w * .15;
@@ -908,19 +909,16 @@ class Dash {
         this.ore_detector = new OreDetector(p4x, y+b, p4w, b3h);
         this.port_map = new PortMap(p4x, p3y2, p4w, b3h);
         this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h);
-        this.btns = new ButtonSet();
-        this.btns.add(new ScoopButton(p3x, y+b, b3w, b3h));
-        this.btns.add(new LSIButton(p3x, p3y2, b3w, b3h));
-        this.btns.add(new FlyingButton(p3x, p3y3, b3w, b3h, ship));
-        this.btns.add(new OreDetectorButton(p3x2, y+b, b3w, b3h));
-        this.btns.add(new PortMapButton(p3x2, p3y2, b3w, b3h));
-        this.btns.add(new LiveStatusButton(p3x2, p3y3, b3w, b3h));
+        this.form = new Form();
+        this.form.add(new ScoopButton(p3x, y+b, b3w, b3h));
+        this.form.add(new LSIButton(p3x, p3y2, b3w, b3h));
+        this.form.add(new FlyingButton(p3x, p3y3, b3w, b3h, ship));
+        this.form.add(new OreDetectorButton(p3x2, y+b, b3w, b3h));
+        this.form.add(new PortMapButton(p3x2, p3y2, b3w, b3h));
+        this.form.add(new LiveStatusButton(p3x2, p3y3, b3w, b3h));
     }
     set_status(status) {
         this.live_status.set_status(status);
-    }
-    mouse(down, x, y) {
-        this.btns.mouse(down, x, y);
     }
     draw(gfx) {
         gfx.draw_rect(this.x, this.y, this.w, this.h, config.color_dash_bg);
@@ -930,9 +928,7 @@ class Dash {
         this.ore_detector.draw(gfx);
         this.port_map.draw(gfx);
         this.live_status.draw(gfx);
-        for (const btn of this.btns.set) {
-            btn.draw(gfx);
-        }
+        this.form.draw(gfx);
     }
 }; // class Dash
 
@@ -964,7 +960,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.view = new LiveView(0, view_y, cw, view_h, this.ship, this.terrain, this.ports, this.deposits);
         this.status = null;
         this.message = null;
-        this.btn_sets = [ this.dash.btns ];
+        this.forms = [ this.dash.form ];
     }
     run() {
         if (!this.playing) return;
@@ -1031,8 +1027,8 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         //this.draw();
     }
     event_mouse(down, x, y) {
-        if (this.btn_sets.length == 0) return;
-        this.btn_sets[this.btn_sets.length-1].mouse(down, x, y);
+        if (this.forms.length == 0) return;
+        this.forms[this.forms.length-1].mouse(down, x, y);
     }
     set_thrust(code, on) {
         switch (code) {
