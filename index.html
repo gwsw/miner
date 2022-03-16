@@ -36,7 +36,7 @@ var config = {
     min_elev               : 10,
     ore_mass_max           : 1000,
     ore_mass_min           : 8,
-    port_screens_per       : 5,
+    port_screens_per       : .5,
     port_land_max_dist     : 10,
     ship_bot_thrust        : 0.004,
     ship_mass              : 50,
@@ -73,6 +73,7 @@ var config = {
     color_menu_btn_bg      : "2050c0",
     color_menu_btn_fg      : "ffffff",
     color_menu_btn_hold_down: "ffff00",
+    color_menu_hdr_fg      : "000000",
     color_ore              : "d4af37",
     color_port             : "ff0000",
     color_resmap_bg        : "a8a818",
@@ -337,127 +338,102 @@ class Form extends Drawable {
 }; // class Form
 
 // --------------------------------------------------------------------
+class MenuButton extends Button {
+    constructor(menu, title, slot) {
+        super([title], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
+            0, menu.btn_x, menu.btn_y + slot * (menu.btn_h + menu.btn_sp), menu.btn_w, menu.btn_h);
+        this.slot = slot;
+    }
+    click(down) {
+        super.click(down);
+        if (!down) return;
+        this.clicker(this.slot);
+    }
+}; // class MenuButton
+
+// --------------------------------------------------------------------
 class Menu extends Form {
-    constructor(x, y, w, h) {
+    constructor(x, y, w, h, title) {
         super(x, y, w, h, config.color_menu_bg);
+        this.title = title;
         //FIXME
+        const title_h = 40; ///FIXME
         this.btn_w = Math.floor(w * 0.6);
         this.btn_h = Math.floor(h / 10);
-        this.btn_sp = Math.floor(bh * .3);
-        this.btn_x = (w - bw) / 2;
-        this.btn_y = y + bh * .75;
+        this.btn_sp = Math.floor(this.btn_h * .3);
+        this.btn_x = (w - this.btn_w) / 2;
+        this.btn_y = y + title_h + this.btn_h * .75;
     }
     draw(gfx) {
         super.draw(gfx);
+        gfx.draw_text(this.x, this.y, this.title, config.color_menu_hdr_fg);
         gfx.draw_outline(this.x, this.y, this.w, this.h, config.menu_border, config.menu_border, config.color_menu_border);
     }
-    add_item(title, clicker) {
-        this.add(new MenuButton(this, title, this.btns.length, clicker));
-    }
-    //add_button(title, bg = null, fg = null, state = 0, state_fetcher = null) {
-    //    if (bg == null) bg = config.color_menu_bg;
-    //    if (fg == null) fg = config.color_menu_fg;
-    //    super.add([title], [bg], [fg], state, x, y, w, h, state_fetcher);
-    //}
 }; // class Menu
 
 // --------------------------------------------------------------------
-class SellButton extends Button {
-    constructor(x, y, w, h, price) {
-        super(["Sell ore at $"+price.toString()+" per ton"],
-            [config.color_menu_btn_bg],
-            [config.color_menu_btn_fg],
-            1, x, y, w, h);
+class SellButton extends MenuButton {
+    constructor(menu, price) {
+        super(menu, "Sell ore at $"+price.toString()+" per ton", 0);
     }
-    click(down) {
-        super.click(down);
-        if (!down) return;
+    clicker(slot) {
         ///FIXME
     }
-
 }; // class SellButton
 
 // --------------------------------------------------------------------
-class BuyFuelButton extends Button {
-    constructor(x, y, w, h) {
-        super(["Exit"], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
-            0, x, y, w, h);
+class BuyFuelButton extends MenuButton {
+    constructor(menu, price) {
+        super(menu, "Buy fuel at $"+price.toString()+" per liter", 1);
     }
-    click(down) {
-        super.click(down);
-        if (!down) return;
+    clicker(slot) {
         ///FIXME
     }
 }; // class BuyFuelButton
 
 // --------------------------------------------------------------------
-class BorrowButton extends Button {
-    constructor(x, y, w, h) {
-        super(["Borrow"], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
-            0, x, y, w, h);
+class BorrowButton extends MenuButton {
+    constructor(menu) {
+        super(menu, "Borrow", 2);
     }
-    click(down) {
-        super.click(down);
-        if (!down) return;
+    clicker(slot) {
         ///FIXME
     }
 }; // class BorrowButton
 
 // --------------------------------------------------------------------
-class EStoreButton extends Button {
-    constructor(x, y, w, h) {
-        super(["EStore"], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
-            0, x, y, w, h);
+class EStoreButton extends MenuButton {
+    constructor(menu) {
+        super(menu, "Equipment store", 3);
     }
-    click(down) {
-        super.click(down);
-        if (!down) return;
+    clicker(slot) {
         ///FIXME
     }
 }; // class EStoreButton
 
 // --------------------------------------------------------------------
-class MenuButton extends Button {
-    constructor(menu, title, yslot, clicker) {
-        super([title], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
-            0, menu.btn_x, menu.btn_y + yslot * (menu.btn_h + menu.btn_sp), menu.btn_w, menu.btn_h);
-        this.slot = yslot;
-        this.clicker = clicker;
+class ExitButton extends MenuButton {
+    constructor(menu) {
+        super(menu, "Exit", 4);
     }
-    click(down) {
-        super.click(down);
-        if (!down) return;
-        this.clicker.click(this.slot);
-    }
-}; // class MenuButton
-
-// --------------------------------------------------------------------
-class ExitButton extends Button {
-    constructor(x, y, w, h) {
-        super(["Exit"], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
-            0, x, y, w, h);
-    }
-    click(down) {
-        super.click(down);
-        if (!down) return;
+    clicker(slot) {
         ///FIXME
     }
 }; // class ExitButton
 
 // --------------------------------------------------------------------
 class PortMenu extends Menu {
-    constructor(x, y, w, h, sell_price = 250) {
-        super(x, y, w, h);
-        this.sell_price = sell_price;
-        //FIXME
-        const bw = Math.floor(w * 0.6);
-        const bh = Math.floor(h / 10);
-        const bs = Math.floor(bh * .3);
-        let bx = (w - bw) / 2;
-        let by = y + bh * .75;
-        this.add(new SellButton(bx, by, bw, bh, this.sell_price));
-        by += bh + bs;
-        this.add(new ExitButton(bx, by, bw, bh));
+    constructor(x, y, w, h, port) {
+        super(x, y, w, h, "Welcome to port "+port.name+"!");
+        this.port = port;
+    }
+    init() {
+        this.add(new SellButton(this, this.port.sell_ore_price()));
+        this.add(new BuyFuelButton(this, this.port.buy_fuel_price()));
+        this.add(new BorrowButton(this));
+        this.add(new EStoreButton(this));
+        this.add(new ExitButton(this));
+        return this;
     }
 }; // class PortMenu
 
@@ -779,6 +755,12 @@ class Port {
         gfx.draw_circle(x, y, 30, config.color_port);
         gfx.draw_text(x-30, y-40, this.name, config.color_port);
     }
+    buy_fuel_price() {
+        return 50;
+    }
+    sell_ore_price() {
+        return 230;
+    }
 }; // class Port
 
 // --------------------------------------------------------------------
@@ -1066,6 +1048,10 @@ class Game {
         const canvas = gfx.ctx.canvas;
         const cw = canvas.width;
         const ch = canvas.height;
+        this.x = 0;
+        this.y = 0;
+        this.w = cw;
+        this.h = ch;
         const space = Math.floor(ch*.01);
         const dash_h = Math.floor(ch*.30);
         const dash_y = ch - dash_h;
@@ -1111,7 +1097,10 @@ this.ship.add_fuel(this.ship.max_fuel/3);
             const land_port = this.view.ports.can_land(ship.loc.x);
             if (land_port != null) {
                 ship.enter_port(land_port);
-                this.forms.push(new PortMenu(land_port));
+                const xb = Math.floor(this.w * 0.10);
+                const yb = xb;
+                const menu = new PortMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, land_port);
+                this.forms.push(menu.init());
             } else {
                 const loaded = ship.prospect(this.deposits);
             }
@@ -1129,7 +1118,9 @@ this.ship.add_fuel(this.ship.max_fuel/3);
 
         this.gfx.clear(config.color_sky);
         this.view.draw(this.gfx);
-        this.dash.draw(this.gfx);
+        for (let i = 0; i < this.forms.length; ++i) {
+            this.forms[i].draw(this.gfx);
+        }
         this.draw_message();
     }
     static _set_status(status) { // kinda ugly
