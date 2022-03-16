@@ -11,9 +11,10 @@
 
 /** TODO
 * Menu
-* Port menu
-* Allow move left (add stuff to beginning of array)
-* View follow y height of ship.
+> Port menu
+> Allow move left (add stuff to beginning of array)
+> View follow y height of ship.
+> Direction arrows.
 **/
 
 // --------------------------------------------------------------------
@@ -278,13 +279,14 @@ class AltitudeGauge extends Gauge {
 
 // --------------------------------------------------------------------
 class Button extends Drawable {
-    constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, state_fetcher = null) {
+    constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, holdable = false, state_fetcher = null) {
         super(x, y, w, h);
         this.state_titles = state_titles;
         this.state_colors = state_colors;
         this.state_colors_fg = state_colors_fg;
         this.state = state;
         this.state_fetcher = state_fetcher;
+        this.holdable = holdable;
     }
     set_state(state) {
         this.state = state;
@@ -292,7 +294,7 @@ class Button extends Drawable {
     inside(x, y) {
         return x >= this.x && x < this.x + this.w && y >= this.y && y < this.y + this.h;
     }
-    keystroke(down) {
+    keystroke(code, down) {
     }
     click(down) {
     }
@@ -321,7 +323,7 @@ class Form extends Drawable {
     }
     mouse(down, x, y) {
         for (const btn of this.btns) {
-            if (btn.inside(x, y)) {
+            if (btn.holdable && btn.inside(x, y)) {
                 this.held_btn = down ? btn : null;
                 btn.click(down);
                 return;
@@ -341,7 +343,7 @@ class Form extends Drawable {
 class MenuButton extends Button {
     constructor(menu, title, slot) {
         super([title], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
-            0, menu.btn_x, menu.btn_y + slot * (menu.btn_h + menu.btn_sp), menu.btn_w, menu.btn_h);
+            0, menu.btn_x, menu.btn_y + slot * (menu.btn_h + menu.btn_sp), menu.btn_w, menu.btn_h, true);
         this.slot = slot;
     }
     click(down) {
@@ -456,6 +458,7 @@ class ScoopButton extends Button {
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
             2, x, y, w, h);
+        this.holdable = (this.state != 2);
     }
     click(down) {
         if (!down) return;
@@ -469,6 +472,7 @@ class LSIButton extends Button {
             [config.color_btn_inactive, config.color_btn_active],
             [config.color_btn_inactive_fg, config.color_btn_active_fg],
             0, x, y, w, h);
+        this.holdable = true;
     }
     click(down) {
         if (!down) return;
@@ -493,6 +497,7 @@ class OreDetectorButton extends Button {
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
             2, x, y, w, h);
+        this.holdable = (this.state != 2);
     }
     static click(down) {
         if (!down) return;
@@ -506,6 +511,7 @@ class PortMapButton extends Button {
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
             2, x, y, w, h);
+        this.holdable = (this.state != 2);
     }
     static click(down) {
         if (!down) return;
@@ -524,10 +530,9 @@ class LiveStatusButton extends Button {
 class SouthButton extends Button {
     constructor(x, y, w, h) {
         super(["UP"], [config.color_btn_dir], [config.color_btn_dir_fg],
-            0, x, y, x, h);
+            0, x, y, w, h);
     }
     click(down) {
-        if (!down) return;
         if (_game != null) _game.keystroke("ArrowDown", down);
     }
 }; // class SouthButton
@@ -848,10 +853,12 @@ class Ship extends MassiveObject {
         if (deposit + this.cargo > this.max_cargo)
             deposit = this.max_cargo - this.cargo;
         this.cargo += deposit;
+        this.mass += deposit;
         return deposit;
     }
     unload_ore() {
         const cargo = this.cargo;
+        this.mass -= cargo;
         this.cargo = 0;
         return cargo;
     }
@@ -1007,6 +1014,8 @@ class Dash extends Form {
         const p4x = p3x + p3w + b;
         const gw = Math.floor((p2w-2*b)/ 3);
         const gh = h - 2*b;
+        const dirw = p2w * 0.25;
+        const dirh = dirw;
         const b3w = (p3w-b) / 2;
         const b3h = Math.floor((h-4*b) / 3);
         const p3x2 = p3x + b3w + b;
@@ -1025,6 +1034,7 @@ class Dash extends Form {
         this.add(new OreDetectorButton(p3x2, y+b, b3w, b3h));
         this.add(new PortMapButton(p3x2, p3y2, b3w, b3h));
         this.add(new LiveStatusButton(p3x2, p3y3, b3w, b3h));
+        this.add(new SouthButton(p2x + (p2w-dirw)/2, y + h/2, dirw, dirh));
     }
     set_status(status) {
         this.live_status.set_status(status);
@@ -1131,10 +1141,10 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         if (_game != null) _game.set_status(status);
     }
     static _event_keydown(e) {
-        if (_game != null) _game.event_keystroke(true, e.code);
+        if (_game != null) _game.event_keystroke(e.code, true);
     }
     static _event_keyup(e) {
-        if (_game != null) _game.event_keystroke(false, e.code);
+        if (_game != null) _game.event_keystroke(e.code, false);
     }
     static _event_mousedown(e) {
         if (_game != null) _game.event_mouse(true, e.offsetX, e.offsetY);
@@ -1145,7 +1155,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
     static _game_over(msg) {
         if (_game != null) _game.game_over(msg);
     }
-    event_keystroke(down, code) {
+    event_keystroke(code, down) {
         this.set_thrust(code, down);
         //this.draw();
     }
