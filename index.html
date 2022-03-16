@@ -353,17 +353,17 @@ class MenuButton extends Button {
 }; // class MenuButton
 
 // --------------------------------------------------------------------
-class TextMenuButton extends MenuButton {
-    constructor(menu, title, value, slot) {
-        super(menu, title, slot);
-        this.value = value;
+class NoMenuButton extends MenuButton {
+    constructor(menu, slot) {
+        super(menu, "No", slot);
     }
     click_menu_button(slot) {
+        _game.pop_form();
     }
-}; // class TextMenuButton
+}; // class NoMenuButton
 
 // --------------------------------------------------------------------
-class YesSellMenuButton extends MenuButton {
+class YesSellOreMenuButton extends MenuButton {
     constructor(menu, slot) {
         super(menu, "Yes", slot);
         this.ship = menu.ship;
@@ -374,17 +374,24 @@ class YesSellMenuButton extends MenuButton {
         _game.user_acct.add_cash(this.price * cargo, "Sale of "+cargo.toString()+" tons ore");
         _game.pop_form();
     }
-}; // class YessSellMenuButton
+}; // class YessSellOreMenuButton
 
 // --------------------------------------------------------------------
-class NoSellMenuButton extends MenuButton {
-    constructor(menu, slot) {
-        super(menu, "No", slot);
+class YesBuyFuelMenuButton extends MenuButton {
+    constructor(menu, fuel, slot) {
+        super(menu, "Yes", slot);
+        this.ship = menu.ship;
+        this.price = menu.price;
+        this.fuel = fuel;
     }
     click_menu_button(slot) {
+        const fuel = this.ship.add_fuel(this.fuel);
+        const cost = fuel * this.price;
+        _game.user_acct.remove_cash(cost, "Buy "+fuel.toString()+" liters fuel");
+        _game.set_stats("Bought "+fuel.toString()+"L fuel for $"+cost.toString());
         _game.pop_form();
     }
-}; // class YessSellMenuButton
+}; // class YesBuyFuelMenuButton
 
 // --------------------------------------------------------------------
 class Menu extends Form {
@@ -407,23 +414,23 @@ class Menu extends Form {
 }; // class Menu
 
 // --------------------------------------------------------------------
-class SellMenu extends Menu {
+class SellOreMenu extends Menu {
     constructor(x, y, w, h, ship, price) {
         super(x, y, w, h, "");
         this.ship = ship;
         this.price = price;
     }
     init() {
-        const amt = this.ship.cargo;
-        this.desc = "Do you want to sell the "+amt.toString()+" tons of cargo in your ship?";
-        this.add(new YesSellMenuButton(this, 0));
-        this.add(new NoSellMenuButton(this, 1));
+        const cargo = this.ship.cargo;
+        this.desc = "Do you want to sell the "+cargo.toString()+" tons of cargo in your ship?";
+        this.add(new YesSellOreMenuButton(this, 0));
+        this.add(new NoMenuButton(this, 1));
         return this;
     }
-}; // class SellMenu
+}; // class SellOreMenu
 
 // --------------------------------------------------------------------
-class SellButton extends MenuButton {
+class SellOreButton extends MenuButton {
     constructor(menu, price) {
         super(menu, "Sell ore at $"+price.toString()+" per ton", 0);
         this.price = price;
@@ -432,7 +439,7 @@ class SellButton extends MenuButton {
         if (_game == null) return;
         _game.need_sell = this.price;
     }
-}; // class SellButton
+}; // class SellOreButton
 
 // --------------------------------------------------------------------
 class BuyFuelButton extends MenuButton {
@@ -484,7 +491,7 @@ class PortMenu extends Menu {
         this.port = port;
     }
     init() {
-        this.add(new SellButton(this, this.port.sell_ore_price()));
+        this.add(new SellOreButton(this, this.port.sell_ore_price()));
         this.add(new BuyFuelButton(this, this.port.buy_fuel_price()));
         this.add(new BorrowButton(this));
         this.add(new EStoreButton(this));
@@ -1190,7 +1197,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         if (this.need_sell >= 0) {
             const xb = Math.floor(this.w * 0.20);
             const yb = xb;
-            const menu = new SellMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.need_sell);
+            const menu = new SellOreMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.need_sell);
             this.forms.push(menu.init());
             this.need_sell = -1;
         }
