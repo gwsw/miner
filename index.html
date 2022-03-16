@@ -135,7 +135,16 @@ class Graphics {
     constructor(ctx) {
         this.ctx = ctx;
         const text_size = ctx.measureText("M");
-        this.font_height = Math.floor(text_size.width * 1.2); // FIXME
+        ///this.font_height = Math.floor(text_size.width * 1.2); // FIXME
+        const font_style = '';
+        const body = document.getElementsByTagName('body')[0];
+        const dummy = document.createElement('div');
+        const dummy_text = document.createTextNode('M');
+        dummy.appendChild(dummy_text);
+        dummy.setAttribute('style', font_style+'position:absolute;top:0;left:0');
+        body.appendChild(dummy);
+        this.font_height = dummy.offsetHeight;
+        body.removeChild(dummy);
     }
     clear(color) {
         const canvas = this.ctx.canvas;
@@ -184,6 +193,70 @@ class Graphics {
         if (nx > x) x = nx;
         this.draw_text(x, y, text, color);
         return text_size;
+    }
+    static end_word(text, p) {
+        for (; p < text.length; ++p) {
+            if (text.substr(p,1) != " ") break;
+        }
+        for (; p < text.length; ++p) {
+            if (text.substr(p,1) == " " || text.substr(p,1) == "\n") break;
+        }
+        return p;
+    }
+    split_text(text, width) {
+        let lines = [];
+        let line = 0;
+        for (;;) {
+            // Skip spaces.
+            while (text.substr(line,1) == " ")
+                ++line;
+            let end_line = line;
+            // Output line starts here; step thru words.
+            for (;;) {
+                if (end_line >= text.length) {
+                    if (end_line > line) lines.push(text.substr(line, end_line-line));
+                    return lines;
+                }
+                const newline = (text.substr(end_line,1) == "\n");
+                let e = -1;
+                if (!newline) e = Graphics.end_word(text, end_line);
+                if (newline || this.measure_text(text.substr(line, e-line)).width >= width) {
+                    if (end_line == line && !newline) { // we must break a word
+                        while (e > line && this.measure_text(text.substr(line, e-line)).width >= width)
+                            e = e - 1;
+                        end_line = e;
+                    }
+                    lines.push(text.substr(line, end_line-line));
+                    line = end_line;
+                    if (newline) ++line;
+                    break;
+                }
+                end_line = e;
+            }
+        }
+    }
+    draw_paragraph(msg, x, y, w, color, list_char = "", center = false) {
+        const lines = this.split_text(msg, w);
+        const line_h = this.measure_text("M").height;
+        const list_indent = (list_char.length == 0) ? 0 : this.measure_text(list_char).width;
+        for (let i = 0; i < lines.length; ++i) {
+            let line = lines[i];
+            let tx = x;
+            let center_line = center;
+            if (line.substr(0,1) == "\t") {
+                center_line = true;
+                line = line.substr(1);
+            }
+            if (center_line) {
+                const tw = this.measure_text(line).width;
+                tx += Math.floor((w - tw) / 2);
+            }
+            if (list_char.length > 0 && line.substr(0,list_char.length) != list_char)
+                tx += list_indent;
+            this.draw_text(tx, y, line, color);
+            y += line_h;
+        }
+        return { w: w, h: lines.length * line_h };
     }
 }; // class Graphics
 
@@ -560,7 +633,7 @@ class OreDetectorButton extends Button {
             2, x, y, w, h);
         this.holdable = (this.state != 2);
     }
-    static click(down) {
+    click(down) {
         if (!down) return;
     }
 }; // class OreDetectorButton
@@ -574,7 +647,7 @@ class PortMapButton extends Button {
             2, x, y, w, h);
         this.holdable = (this.state != 2);
     }
-    static click(down) {
+    click(down) {
         if (!down) return;
     }
 }; // class PortMapButton
@@ -635,14 +708,17 @@ class PortMap extends ResourceMap {
 class LiveStatus extends Drawable {
     constructor(x, y, w, h) {
         super(x, y, w, h);
-        this.message = "Welcome.";
+        this.message = "Welcome, pilot.\nYour ship is ready for liftoff.";
     }
     set_status(status) {
         this.message = status;
     }
     draw(gfx) {
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, config.gauge_border, config.gauge_border, config.color_status_bg, config.color_sky); 
-        gfx.draw_text(this.x + config.gauge_border *2.0, this.y + config.gauge_border *2.5, this.message, config.color_status_fg);
+        const xindent = config.gauge_border + 4;
+        gfx.draw_paragraph(this.message,
+            this.x + xindent, this.y + config.gauge_border,
+            this.w - 2*xindent, config.color_status_fg);
     }
 }; // class LiveStatus
 
@@ -1134,8 +1210,8 @@ class Game {
         this.y = 0;
         this.w = cw;
         this.h = ch;
-        const space = Math.floor(ch*.01);
-        const dash_h = Math.floor(ch*.30);
+        const space = Math.floor(ch*.005);
+        const dash_h = Math.floor(ch*.35);
         const dash_y = ch - dash_h;
         const view_y = 0;
         const view_h = dash_y - space - view_y;
@@ -1270,8 +1346,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         if (this.message == null) return;
         const b = 5;
         this.gfx.draw_outlined_rect(this.msgrect.x, this.msgrect.y, this.msgrect.w, this.msgrect.h, b, b, config.color_msg_bg, config.color_msg_border);
-        const text_size = this.gfx.measure_text(this.message);
-        const y = this.msgrect.y + (this.msgrect.h - text_size.height) / 2;
+        const y = this.msgrect.y + (this.msgrect.h - this.gfx.font_height) / 2;
         this.gfx.draw_centered_text(this.msgrect.x, y, this.msgrect.w, this.message, config.color_msg_fg);
     }
 }; // class Game
