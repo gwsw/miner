@@ -843,7 +843,6 @@ class Ship extends MassiveObject {
         this.max_fuel = config.max_fuel;
         this.flying = false;
         this.inport = null;
-        this.bot_thrust_timeout = 0;
     }
     load_ore(deposit) {
         if (deposit + this.cargo > this.max_cargo)
@@ -872,7 +871,6 @@ class Ship extends MassiveObject {
     set_bot_thrust(on, supercharge = false) {
         if (!this.flying && on) this.liftoff();
         this.bot_thrust = supercharge ? config.ship_bot_thrust*3 : on ? config.ship_bot_thrust : 0;
-        if (supercharge) bot_thrust_timeout = now() + 1.0;
     }
     set_side_thrust(left, on) {
         if (!this.flying) return;
@@ -922,10 +920,6 @@ class Ship extends MassiveObject {
         this.use_fuel(fuel_used);
         if (this.flying)
             this.accelerate(this.side_thrust, this.bot_thrust - config.gravity);
-        if (this.bot_thrust_timeout && time > this.bot_thrust_timeout) {
-            this.set_bot_thrust(0);
-            this.thrust_timeout = 0;
-        }
     }
     set_status(msg) {
         Game._set_status(msg); // FIXME
