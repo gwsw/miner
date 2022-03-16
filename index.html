@@ -371,7 +371,7 @@ class YesSellMenuButton extends MenuButton {
     }
     click_menu_button(slot) {
         const cargo = this.ship.unload_ore();
-        _game.user_acct.add_cash(this.price * cargo);
+        _game.user_acct.add_cash(this.price * cargo, "Sale of "+cargo.toString()+" tons ore");
         _game.pop_form();
     }
 }; // class YessSellMenuButton
@@ -844,15 +844,25 @@ class LiveView extends Drawable {
 class Account {
     constructor(deposit) {
         this.balance = deposit;
+        this.logs = [];
     }
-    add_cash(amt) {
+    add_cash(amt, reason) {
+        this.log(amt, reason);
         this.balance += amt;
         return this.balance;
     }
-    remove_cash(amt) {
-        if (amt > this.balance) amt = this.balance;
+    remove_cash(amt, reason) {
+        this.log(-amt, reason);
+        if (amt > this.balance) {
+            this.log(0, "overdrawn");
+            amt = this.balance;
+        }
         this.balance -= amt;
         return this.balance;
+    }
+    log(amt, reason) {
+        const time = now();
+        this.logs.push(time.toString()+" "+this.balance.toString()+" + "+amt.toString()+" "+reason);
     }
 }; // class Account
 
