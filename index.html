@@ -13,6 +13,7 @@
 * Menu
 * Port menu
 * Allow move left (add stuff to beginning of array)
+* View follow y height of ship.
 **/
 
 // --------------------------------------------------------------------
@@ -36,7 +37,7 @@ var config = {
     min_elev               : 10,
     ore_mass_max           : 1000,
     ore_mass_min           : 8,
-    port_screens_per       : .5,
+    port_screens_per       : 5,
     port_land_max_dist     : 10,
     ship_bot_thrust        : 0.004,
     ship_mass              : 50,
@@ -53,9 +54,9 @@ var config = {
     color_btn_dir          : "1050c0",
     color_btn_dir_fg       : "000000",
     color_btn_inactive     : "c08010",
-    color_btn_inactive_fg  : "ffffff",
-    color_btn_none         : "808080",
-    color_btn_none_fg      : "c0c0c0",
+    color_btn_inactive_fg  : "000000",
+    color_btn_none         : "a0a0a0",
+    color_btn_none_fg      : "383838",
     color_dash_bg          : "669ae4",
     color_fuel             : "10d040",
     color_gauge_bg         : "e0e0e0",
@@ -72,10 +73,10 @@ var config = {
     color_menu_border      : "000000",
     color_menu_btn_bg      : "2050c0",
     color_menu_btn_fg      : "ffffff",
-    color_menu_btn_hold_down: "ffff00",
+    color_menu_btn_held    : "ffff00",
     color_menu_hdr_fg      : "000000",
     color_ore              : "d4af37",
-    color_port             : "ff0000",
+    color_port             : "f0f0f0",
     color_resmap_bg        : "a8a818",
     color_ship             : "10ffff",
     color_sky              : "000000",
@@ -134,7 +135,7 @@ class Graphics {
     constructor(ctx) {
         this.ctx = ctx;
         const text_size = ctx.measureText("M");
-        this.font_height = Math.floor(text_size.width * 1.5); // FIXME
+        this.font_height = Math.floor(text_size.width * 1.2); // FIXME
     }
     clear(color) {
         const canvas = this.ctx.canvas;
@@ -283,7 +284,6 @@ class Button extends Drawable {
         this.state_colors = state_colors;
         this.state_colors_fg = state_colors_fg;
         this.state = state;
-        this.hold_down = false;
         this.state_fetcher = state_fetcher;
     }
     set_state(state) {
@@ -295,13 +295,12 @@ class Button extends Drawable {
     keystroke(down) {
     }
     click(down) {
-        this.hold_down = down;
     }
-    draw(gfx) {
+    draw(gfx, held) {
         if (this.state_fetcher != null)
             this.state = this.state_fetcher.button_state();
         let bb = config.button_border;
-        const color = this.hold_down ? config.color_menu_btn_hold_down : this.state_colors[this.state];
+        const color = held ? config.color_menu_btn_held : this.state_colors[this.state];
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, bb, bb, color, config.color_sky);
         //let cy = this.y + this.h/2; // FIXME
         let cy = this.y + (this.h - gfx.font_height) / 2;
@@ -323,6 +322,7 @@ class Form extends Drawable {
     mouse(down, x, y) {
         for (const btn of this.btns) {
             if (btn.inside(x, y)) {
+                this.held_btn = down ? btn : null;
                 btn.click(down);
                 return;
             }
@@ -332,7 +332,7 @@ class Form extends Drawable {
     draw(gfx) {
         gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
         for (const btn of this.btns) {
-            btn.draw(gfx);
+            btn.draw(gfx, btn == this.held_btn);
         }
     }
 }; // class Form
@@ -353,20 +353,20 @@ class MenuButton extends Button {
 
 // --------------------------------------------------------------------
 class Menu extends Form {
-    constructor(x, y, w, h, title) {
+    constructor(x, y, w, h, desc) {
         super(x, y, w, h, config.color_menu_bg);
-        this.title = title;
+        this.desc = desc;
         //FIXME
-        const title_h = 40; ///FIXME
+        const desc_h = 40; ///FIXME
         this.btn_w = Math.floor(w * 0.6);
         this.btn_h = Math.floor(h / 10);
         this.btn_sp = Math.floor(this.btn_h * .3);
-        this.btn_x = (w - this.btn_w) / 2;
-        this.btn_y = y + title_h + this.btn_h * .75;
+        this.btn_x = x + (w - this.btn_w) / 2;
+        this.btn_y = y + desc_h + this.btn_h * .75;
     }
     draw(gfx) {
         super.draw(gfx);
-        gfx.draw_text(this.x, this.y, this.title, config.color_menu_hdr_fg);
+        gfx.draw_text(this.x +20, this.y + this.btn_h*.5, this.desc, config.color_menu_hdr_fg); // FIXME
         gfx.draw_outline(this.x, this.y, this.w, this.h, config.menu_border, config.menu_border, config.color_menu_border);
     }
 }; // class Menu
@@ -394,7 +394,7 @@ class BuyFuelButton extends MenuButton {
 // --------------------------------------------------------------------
 class BorrowButton extends MenuButton {
     constructor(menu) {
-        super(menu, "Borrow", 2);
+        super(menu, "Borrow money", 2);
     }
     clicker(slot) {
         ///FIXME
@@ -414,10 +414,10 @@ class EStoreButton extends MenuButton {
 // --------------------------------------------------------------------
 class ExitButton extends MenuButton {
     constructor(menu) {
-        super(menu, "Exit", 4);
+        super(menu, "Leave this port", 4);
     }
     clicker(slot) {
-        ///FIXME
+        if (_game != null) _game.exit_port();
     }
 }; // class ExitButton
 
@@ -752,7 +752,7 @@ class Port {
         this.name = "Omega Station";
     }
     draw(gfx, x, y) {
-        gfx.draw_circle(x, y, 30, config.color_port);
+        gfx.draw_circle(x, y, config.port_land_max_dist, config.color_port);
         gfx.draw_text(x-30, y-40, this.name, config.color_port);
     }
     buy_fuel_price() {
@@ -843,6 +843,7 @@ class Ship extends MassiveObject {
         this.max_fuel = config.max_fuel;
         this.flying = false;
         this.inport = null;
+        this.bot_thrust_timeout = 0;
     }
     load_ore(deposit) {
         if (deposit + this.cargo > this.max_cargo)
@@ -868,9 +869,10 @@ class Ship extends MassiveObject {
             Game._game_over("Your ship ran out of fuel!");
         }
     }
-    set_bot_thrust(on) {
+    set_bot_thrust(on, supercharge = false) {
         if (!this.flying && on) this.liftoff();
-        this.bot_thrust = on ? config.ship_bot_thrust : 0;
+        this.bot_thrust = supercharge ? config.ship_bot_thrust*3 : on ? config.ship_bot_thrust : 0;
+        if (supercharge) bot_thrust_timeout = now() + 1.0;
     }
     set_side_thrust(left, on) {
         if (!this.flying) return;
@@ -920,6 +922,10 @@ class Ship extends MassiveObject {
         this.use_fuel(fuel_used);
         if (this.flying)
             this.accelerate(this.side_thrust, this.bot_thrust - config.gravity);
+        if (this.bot_thrust_timeout && time > this.bot_thrust_timeout) {
+            this.set_bot_thrust(0);
+            this.thrust_timeout = 0;
+        }
     }
     set_status(msg) {
         Game._set_status(msg); // FIXME
@@ -997,9 +1003,9 @@ class ShipFlyingStateFetcher {
 class Dash extends Form {
     constructor(x, y, w, h, ship, terrain) {
         const b   = w * .01;
-        const p1w = w * .15;
-        const p2w = w * .20;
-        const p3w = w * .25;
+        const p1w = w * .12;
+        const p2w = w * .16;
+        const p3w = w * .30;
         const p4w = w - (p1w + p2w + p3w + 5*b);
         const p1x = x + b;
         const p2x = p1x + p1w + b;
@@ -1074,6 +1080,10 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.message = null;
         this.forms = [ this.dash ];
     }
+    exit_port() {
+        this.ship.exit_port();
+        this.forms.pop(); // close PortMenu
+    }
     run() {
         if (!this.playing) return;
         const time = now();
@@ -1090,8 +1100,8 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.draw();
         if (ship.flying && !was_flying) { // liftoff
             if (ship.inport != null) {
-                ship.exit_port();
-                this.forms.pop(); // close PortMenu
+                // FIXME wait this can't really happen, right? ship just spontaneously takes off while in the menu?
+                this.exit_port();
             }
         } else if (!ship.flying && was_flying) { // landing
             const land_port = this.view.ports.can_land(ship.loc.x);
@@ -1153,6 +1163,9 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         switch (code) {
         case 'ArrowDown':
             this.ship.set_bot_thrust(on);
+            break;
+        case 'ArrowUp':
+            this.ship.set_bot_thrust(on, on);
             break;
         case 'ArrowRight':
             this.ship.set_side_thrust(false, on);
@@ -1230,7 +1243,7 @@ function main() {
     canvas_resize();
     const canvas = el("canvas");
     const gfx = new Graphics(canvas.getContext("2d"));
-    gfx.ctx.font = Math.floor(canvas.height*.022).toString()+"px sans-serif";
+    gfx.ctx.font = Math.floor(canvas.height*.028).toString()+"px sans-serif";
     _game = new Game(gfx);
     document.addEventListener('keyup',   Game._event_keyup);
     document.addEventListener('keydown', Game._event_keydown);
