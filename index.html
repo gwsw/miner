@@ -8,7 +8,6 @@
 <canvas id="canvas" width="1" height="1" style="font-family:Arial"></canvas>
 <script>
 
-
 /** TODO
 * Menu
 > Port menu
@@ -354,6 +353,14 @@ class MenuButton extends Button {
 }; // class MenuButton
 
 // --------------------------------------------------------------------
+class TextMenuButton extends MenuButton {
+    constructor(menu, title, value, slot) {
+        super(menu, title, slot);
+        this.value = value;
+    }
+}; // class TextMenuButton
+
+// --------------------------------------------------------------------
 class Menu extends Form {
     constructor(x, y, w, h, desc) {
         super(x, y, w, h, config.color_menu_bg);
@@ -374,12 +381,37 @@ class Menu extends Form {
 }; // class Menu
 
 // --------------------------------------------------------------------
+class SellMenu extends Menu {
+    constructor(x, y, w, h, ship, price) {
+        super(x, y, w, h, "");
+        this.ship = ship;
+        this.price = price;
+    }
+    init() {
+        const amt = this.ship.cargo;
+        this.desc = "Do you want to sell the "+amt.toString()+" tons of cargo in your ship?";
+        this.add(new TextMenuButton(this, "Yes", 1, 0));
+        this.add(new TextMenuButton(this, "No", 0, 1));
+        return this;
+    }
+    clicker(slot) {
+        if (this.value) { // Yes, sell
+            const cargo = this.ship.unload_ore();
+            _game.user_acct.add_cash(this.price * cargo);
+        }
+        _game.pop_form();
+    }
+}; // class SellMenu
+
+// --------------------------------------------------------------------
 class SellButton extends MenuButton {
     constructor(menu, price) {
         super(menu, "Sell ore at $"+price.toString()+" per ton", 0);
+        this.price = price;
     }
     clicker(slot) {
-        ///FIXME
+        if (_game == null) return;
+        _game.need_sell = this.price;
     }
 }; // class SellButton
 
@@ -414,14 +446,16 @@ class EStoreButton extends MenuButton {
 }; // class EStoreButton
 
 // --------------------------------------------------------------------
-class ExitButton extends MenuButton {
+class LeavePortButton extends MenuButton {
     constructor(menu) {
         super(menu, "Leave this port", 4);
     }
     clicker(slot) {
-        if (_game != null) _game.exit_port();
+        if (_game == null) return;
+        _game.exit_port();
+        _game.pop_form();
     }
-}; // class ExitButton
+}; // class LeavePortButton
 
 // --------------------------------------------------------------------
 class PortMenu extends Menu {
@@ -434,7 +468,7 @@ class PortMenu extends Menu {
         this.add(new BuyFuelButton(this, this.port.buy_fuel_price()));
         this.add(new BorrowButton(this));
         this.add(new EStoreButton(this));
-        this.add(new ExitButton(this));
+        this.add(new LeavePortButton(this));
         return this;
     }
 }; // class PortMenu
@@ -486,7 +520,7 @@ class FlyingButton extends Button {
         super(["On ground", "Flying"],
             [config.color_btn_inactive, config.color_btn_active],
             [config.color_btn_inactive_fg, config.color_btn_active_fg],
-            0, x, y, w, h, new ShipFlyingStateFetcher(ship));
+            0, x, y, w, h, false, new ShipFlyingStateFetcher(ship));
     }
 }; // class LSIButton
 
@@ -793,11 +827,12 @@ class Account {
     }
     add_cash(amt) {
         this.balance += amt;
+        return this.balance;
     }
-    sell_ore(ship, mass, dollars_per_ton, acct) {
-        const cargo = ship.unload_ore();
-        const price = dollars_per_ton * mass;
-        this.add_cash(price);
+    remove_cash(amt) {
+        if (amt > this.balance) amt = this.balance;
+        this.balance -= amt;
+        return this.balance;
     }
 }; // class Account
 
@@ -1083,10 +1118,13 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.status = null;
         this.message = null;
         this.forms = [ this.dash ];
+        this.need_sell = -1;
     }
     exit_port() {
         this.ship.exit_port();
-        this.forms.pop(); // close PortMenu
+    }
+    pop_form() {
+        this.forms.pop();
     }
     run() {
         if (!this.playing) return;
@@ -1118,6 +1156,12 @@ this.ship.add_fuel(this.ship.max_fuel/3);
             } else {
                 const loaded = ship.prospect(this.deposits);
             }
+        }
+        if (this.need_sell >= 0) {
+            const xb = Math.floor(this.w * 0.20);
+            const yb = xb;
+            const menu = new SellMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.need_sell);
+            this.forms.push(menu.init());
         }
     }
     set_status(status) {
