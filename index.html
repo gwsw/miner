@@ -728,31 +728,38 @@ class Terrain extends Drawable {
         super(x, y, w, h);
         this.max_elev = h-20; // FIXME
         this.peaks = [];
+        this.zeropos = 0;
     }
     cover(sxpos, expos) {
-        //@@FIXME
         if (this.peaks.length == 0)
             this.peaks.push(config.min_elev);
-        let elev = this.peaks[this.peaks.length-1];
-        while (this.peaks.length * config.terr_step < expos) {
-            elev += (Math.random() * config.terr_step) - (config.terr_step/2);
-            if (elev < config.min_elev) elev = config.min_elev;
-            if (elev > this.max_elev) elev = this.max_elev;
+        let elev = this.peaks[0];
+        while (sxpos < this.zeropos) {
+            elev = this.random_elevation(elev);
+            this.peaks.unshift(elev);
+            this.zeropos -= config.terr_step;
+        }
+        elev = this.peaks[this.peaks.length-1];
+        while (this.zeropos + this.peaks.length * config.terr_step < expos) {
+            elev = this.random_elevation(elev);
             this.peaks.push(elev);
         }
     }
+    random_elevation(elev) {
+        elev += (Math.random() * config.terr_step) - (config.terr_step/2);
+        if (elev < config.min_elev) elev = config.min_elev;
+        if (elev > this.max_elev) elev = this.max_elev;
+        return elev;
+    }
     index(xpos) {
-        return Math.floor(xpos / config.terr_step);
+        return Math.floor((xpos - this.zeropos) / config.terr_step);
     }
     elevation(xpos) {
 this.cover(xpos-1000, xpos+1000); // FIXME
-/*<<<*/
-/*<<<*/ const lo = 0;
-/*<<<*/
         const pi = this.index(xpos);
         const elev1 = this.peaks[pi];
         const elev2 = this.peaks[pi+1];
-        const xpos1 = pi * config.terr_step;
+        const xpos1 = (pi * config.terr_step) + this.zeropos;
         const xpos2 = xpos1 + config.terr_step;
         const e = (elev2 - elev1) * (xpos - xpos1) / (xpos2 - xpos1);
         return elev1 + e;
@@ -763,15 +770,14 @@ this.cover(xpos-1000, xpos+1000); // FIXME
         ctx.beginPath();
         const bot = this.y + this.h;
         let x = this.x;
-        let xs = xpos % config.terr_step;
+        let xs = zmod(xpos, config.terr_step);
         if (xs > 0) x -= xs;
         let xlast = x;
         ctx.moveTo(x, bot);
-        let pi = this.index(xpos);
-        for (let i = 0; ; ++i) {
+        for (let pi = this.index(xpos);; ++pi) {
             if (pi >= this.peaks.length) 
                 break;
-            const y = this.peaks[pi++];
+            const y = this.peaks[pi];
             ctx.lineTo(x, bot - y);
             xlast = x;
             if (x >= this.w) break;
@@ -787,16 +793,31 @@ this.cover(xpos-1000, xpos+1000); // FIXME
 class TerrObjects extends Drawable {
     constructor(x, y, w, h, terrain, screens_per) {
         super(x, y, w, h);
-        this.s_extend = 0;
-        this.e_extend = 0;
+        this.empty_extend = true;
         this.terrain = terrain;
         this.screens_per = screens_per;
         this.objects = [];
     }
-    place(xpos, thing) {
-        const mag = 10;
-        const r = (randu(this.screens_per * this.w * mag));
+    place(xpos) {
+       const mag = 10;
+       const r = (randu(this.screens_per * this.w * mag));
        return (r  < mag);
+    }
+    cover(sxpos, expos) {
+        if (this.empty_extend) {
+            this.s_extend = this.e_extend = sxpos;
+            this.empty_extend = false;
+        }
+        while (sxpos < this.s_extend) {
+            this.s_extend--;
+            if (this.place(this.s_extend))
+                this.objects.unshift(this.new_object(this.s_extend));
+        }
+        while (expos > this.e_extend) {
+            this.e_extend++;
+            if (this.place(this.e_extend))
+                this.objects.push(this.new_object(this.e_extend));
+        }
     }
     index(xpos) {
         for (let i = 0; i < this.objects.length; ++i) {
@@ -829,14 +850,8 @@ class Ports extends TerrObjects {
     constructor(x, y, w, h, terrain) {
         super(x, y, w, h, terrain, config.port_screens_per);
     }
-    cover(sxpos, expos) {
-        if (this.s_extend <= sxpos && expos <= this.e_extend) return;
-        let xpos = this.e_extend;
-        for (; xpos < expos; ++xpos) {
-            if (this.place(xpos))
-                this.objects.push(new Port(xpos));
-        }
-        this.e_extend = expos;
+    new_object(xpos) {
+        return new Port(xpos);
     }
     can_land(xpos) {
         const port = this.closest(xpos);
@@ -851,14 +866,8 @@ class OreDeposits extends TerrObjects {
     constructor(x, y, w, h, terrain) {
         super(x, y, w, h, terrain, config.deposit_screens_per);
     }
-    cover(sxpos, expos) {
-        if (this.s_extend <= sxpos && expos <= this.e_extend) return;
-        let xpos = this.e_extend;
-        for (; xpos < expos; ++xpos) {
-            if (this.place(xpos))
-                this.objects.push(new OreDeposit(this.ore_mass(xpos), xpos));
-        }
-        this.e_extend = expos;
+    new_object(xpos) {
+        return new OreDeposit(this.ore_mass(xpos), xpos);
     }
     ore_mass(xpos) {
         const M = config.ore_mass_max - config.ore_mass_min;
@@ -893,15 +902,15 @@ class Port {
         this.xpos = xpos;
         this.name = "Omega Station";
     }
+    buy_fuel_price() {
+        return 50; // FIXME
+    }
+    sell_ore_price() {
+        return 230; // FIXME
+    }
     draw(gfx, x, y) {
         gfx.draw_circle(x, y, config.port_land_max_dist, config.color_port);
         gfx.draw_text(x-30, y-40, this.name, config.color_port);
-    }
-    buy_fuel_price() {
-        return 50;
-    }
-    sell_ore_price() {
-        return 230;
     }
 }; // class Port
 
@@ -1393,6 +1402,13 @@ function nhash(n) {
         n = (n >> 1) | (bit << 15);
     }
     return Math.abs(n);
+}
+
+function zmod(x, m) {
+    if (x >= 0) return x % m;
+    let r = (-x) % m;
+    if (r > 0) r = m - r;
+    return r;
 }
 
 function randu(n) {
