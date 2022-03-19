@@ -9,9 +9,7 @@
 <script>
 
 /** TODO
-* Menu
 > Port menu
-> Allow move left (add stuff to beginning of array)
 > View follow y height of ship.
 > Direction arrows.
 **/
@@ -29,6 +27,9 @@ var config = {
     fuel_per_thrust        : .04,
     gauge_border           : 3,
     gravity                : 0.002,
+    grid_step              : 100,
+    grid_len               : 10,
+    grid_thick             : 2,
     liftoff_fuel           : 1,
     liftoff_vel            : 0.02,
     low_fuel               : 10,
@@ -393,6 +394,8 @@ class Form extends Drawable {
     add(btn) {
         this.btns.push(btn);
     }
+    update() {
+    }
     mouse(down, x, y) {
         for (const btn of this.btns) {
             if (btn.holdable && btn.inside(x, y)) {
@@ -439,12 +442,11 @@ class NoMenuButton extends MenuButton {
 class YesSellOreMenuButton extends MenuButton {
     constructor(menu, slot) {
         super(menu, "Yes", slot);
-        this.ship = menu.ship;
-        this.price = menu.price;
+        this.menu = menu;
     }
     click_menu_button(slot) {
-        const cargo = this.ship.unload_ore();
-        _game.user_acct.add_cash(this.price * cargo, "Sale of "+cargo.toString()+" tons ore");
+        const cargo = this.menu.ship.unload_ore();
+        this.menu.acct.add_cash(this.menu.price * cargo, "Sale of "+cargo.toString()+" tons ore");
         _game.pop_form();
     }
 }; // class YessSellOreMenuButton
@@ -460,7 +462,7 @@ class YesBuyFuelMenuButton extends MenuButton {
     click_menu_button(slot) {
         const fuel = this.ship.add_fuel(this.fuel);
         const cost = fuel * this.price;
-        _game.user_acct.remove_cash(cost, "Buy "+fuel.toString()+" liters fuel");
+        _game.acct.remove_cash(cost, "Buy "+fuel.toString()+" liters fuel");
         _game.set_stats("Bought "+fuel.toString()+"L fuel for $"+cost.toString());
         _game.pop_form();
     }
@@ -470,27 +472,31 @@ class YesBuyFuelMenuButton extends MenuButton {
 class Menu extends Form {
     constructor(x, y, w, h, desc) {
         super(x, y, w, h, config.color_menu_bg);
+        this.set_desc(desc);
+    }
+    set_desc(desc) {
         this.desc = desc;
         //FIXME
         const desc_h = 40; ///FIXME
-        this.btn_w = Math.floor(w * 0.6);
-        this.btn_h = Math.floor(h / 10);
+        this.btn_w = Math.floor(this.w * 0.6);
+        this.btn_h = Math.floor(this.h / 10);
         this.btn_sp = Math.floor(this.btn_h * .3);
-        this.btn_x = x + (w - this.btn_w) / 2;
-        this.btn_y = y + desc_h + this.btn_h * .75;
+        this.btn_x = this.x + (this.w - this.btn_w) / 2;
+        this.btn_y = this.y + desc_h + this.btn_h * .75;
     }
     draw(gfx) {
         super.draw(gfx);
-        gfx.draw_text(this.x +20, this.y + this.btn_h*.5, this.desc, config.color_menu_hdr_fg); // FIXME
+        gfx.draw_paragraph(this.desc, this.x +20, this.y + this.btn_h*.5, this.w, config.color_menu_hdr_fg);
         gfx.draw_outline(this.x, this.y, this.w, this.h, config.menu_border, config.menu_border, config.color_menu_border);
     }
 }; // class Menu
 
 // --------------------------------------------------------------------
 class SellOreMenu extends Menu {
-    constructor(x, y, w, h, ship, price) {
+    constructor(x, y, w, h, ship, acct, price) {
         super(x, y, w, h, "");
         this.ship = ship;
+        this.acct = acct;
         this.price = price;
     }
     init() {
@@ -559,9 +565,10 @@ class LeavePortButton extends MenuButton {
 
 // --------------------------------------------------------------------
 class PortMenu extends Menu {
-    constructor(x, y, w, h, port) {
-        super(x, y, w, h, "Welcome to port "+port.name+"!");
+    constructor(x, y, w, h, port, acct) {
+        super(x, y, w, h, "");
         this.port = port;
+        this.acct = acct;
     }
     init() {
         this.add(new SellOreButton(this, this.port.sell_ore_price()));
@@ -569,7 +576,14 @@ class PortMenu extends Menu {
         this.add(new BorrowButton(this));
         this.add(new EStoreButton(this));
         this.add(new LeavePortButton(this));
+        this.set_desc(this.get_desc());
         return this;
+    }
+    update() {
+        this.set_desc(this.get_desc());
+    }
+    get_desc() {
+        return "Welcome to port "+this.port.name+"!\nYou have $"+this.acct.balance+".";
     }
 }; // class PortMenu
 
@@ -764,7 +778,7 @@ this.cover(xpos-1000, xpos+1000); // FIXME
         const e = (elev2 - elev1) * (xpos - xpos1) / (xpos2 - xpos1);
         return elev1 + e;
     }
-    draw(gfx, xpos) {
+    draw(gfx, xpos, boty) {
         if (this.peaks.length == 0) return;
         const ctx = gfx.ctx;
         ctx.beginPath();
@@ -778,7 +792,7 @@ this.cover(xpos-1000, xpos+1000); // FIXME
             if (pi >= this.peaks.length) 
                 break;
             const y = this.peaks[pi];
-            ctx.lineTo(x, bot - y);
+            ctx.lineTo(x, bot - y + boty);
             xlast = x;
             if (x >= this.w) break;
             x += config.terr_step;
@@ -834,12 +848,12 @@ class TerrObjects extends Drawable {
             ++i;
         return this.objects[i];
     }
-    draw(gfx, xpos) {
+    draw(gfx, xpos, boty) {
         if (this.objects.length == 0) return;
         for (let pi = this.index(xpos); pi < this.objects.length; ++pi) {
             const x = this.x + (this.objects[pi].xpos - xpos);
             if (x >= gfx.ctx.canvas.width) break;
-            const y = this.y + this.h - this.terrain.elevation(this.objects[pi].xpos);
+            const y = this.y + this.h - this.terrain.elevation(this.objects[pi].xpos) + boty;
             this.objects[pi].draw(gfx, x, y);
         }
     }
@@ -925,10 +939,27 @@ class LiveView extends Drawable {
     }
     draw(gfx) {
         const xpos = this.ship.loc.x - this.w/2;
-        this.deposits.draw(gfx, xpos);
-        this.ports.draw(gfx, xpos);
-        this.terrain.draw(gfx, xpos);
-        this.ship.draw(gfx, xpos);
+        let boty = this.ship.loc.y - this.h + 50; // FIXME
+        if (boty < 0) boty = 0;
+        this.deposits.draw(gfx, xpos, boty);
+        this.ports.draw(gfx, xpos, boty);
+        this.terrain.draw(gfx, xpos, boty);
+        this.ship.draw(gfx, xpos, boty);
+        this.draw_grid(gfx, 0, boty);
+        this.draw_grid(gfx, 1, boty);
+    }
+    draw_grid(gfx, left, boty) {
+        const grid_color = config.color_sky.opposite();
+        for (let yy = 0; ; yy += config.grid_step) {
+            const y = this.h + boty - yy - config.grid_thick;
+            if (y < 0) break;
+            const label = yy.toString();
+            const label_size = gfx.measure_text(label);
+            const tick_x = left ? this.x : this.x + this.w - config.grid_len;
+            const label_x = left ? tick_x + config.grid_len : tick_x - label_size.width;
+            gfx.draw_rect(tick_x, y, config.grid_len, config.grid_thick, grid_color);
+            gfx.draw_text(label_x, y-label_size.height/2, label, grid_color);
+        }
     }
 }; // class LiveView
 
@@ -1088,9 +1119,9 @@ class Ship extends MassiveObject {
     set_status(msg) {
         Game._set_status(msg); // FIXME
     }
-    draw(gfx, xpos) {
+    draw(gfx, xpos, boty) {
         const x = this.x + this.loc.x - xpos;
-        const y = this.y + this.h - this.loc.y;
+        const y = this.y + this.h - this.loc.y + boty;
         const r = this.w * 0.02;
         this.draw_body(gfx, x, y, r);
         if (this.bot_thrust > 0) this.draw_bot_thrust(gfx, x, y, r);
@@ -1211,7 +1242,7 @@ class Dash extends Form {
 class Game {
     constructor(gfx) {
         this.gfx = gfx;
-        this.user_acct = new Account(10000);
+        this.acct = new Account(10000);
         const canvas = gfx.ctx.canvas;
         const cw = canvas.width;
         const ch = canvas.height;
@@ -1247,6 +1278,9 @@ this.ship.add_fuel(this.ship.max_fuel/3);
     }
     pop_form() {
         this.forms.pop();
+        for (const form of this.forms) {
+            form.update();
+        }
     }
     run() {
         if (!this.playing) return;
@@ -1273,7 +1307,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
                 ship.enter_port(land_port);
                 const xb = Math.floor(this.w * 0.10);
                 const yb = xb;
-                const menu = new PortMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, land_port);
+                const menu = new PortMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, land_port, this.acct);
                 this.forms.push(menu.init());
             } else {
                 const loaded = ship.prospect(this.deposits);
@@ -1282,7 +1316,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         if (this.need_sell >= 0) {
             const xb = Math.floor(this.w * 0.20);
             const yb = xb;
-            const menu = new SellOreMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.need_sell);
+            const menu = new SellOreMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.acct, this.need_sell);
             this.forms.push(menu.init());
             this.need_sell = -1;
         }
@@ -1296,7 +1330,6 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.terrain.cover(sxpos, expos);
         this.ports.cover(sxpos, expos);
         this.deposits.cover(sxpos, expos);
-
         this.gfx.clear(config.color_sky);
         this.view.draw(this.gfx);
         for (let i = 0; i < this.forms.length; ++i) {
@@ -1422,10 +1455,10 @@ function main() {
     const gfx = new Graphics(canvas.getContext("2d"));
     gfx.ctx.font = Math.floor(canvas.height*.028).toString()+"px sans-serif";
     _game = new Game(gfx);
-    document.addEventListener('keyup',   Game._event_keyup);
+    document.addEventListener('keyup', Game._event_keyup);
     document.addEventListener('keydown', Game._event_keydown);
-    document.addEventListener('mousedown',   Game._event_mousedown);
-    document.addEventListener('mouseup',   Game._event_mouseup);
+    document.addEventListener('mousedown', Game._event_mousedown);
+    document.addEventListener('mouseup', Game._event_mouseup);
     window.addEventListener('resize', canvas_resize, false);
     run_game();
 }
@@ -1433,5 +1466,3 @@ function main() {
 </script>
 </body>
 </html>
-
-
