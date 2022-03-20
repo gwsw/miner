@@ -76,6 +76,7 @@ var config = {
     color_menu_btn_fg      : "ffffff",
     color_menu_btn_held    : "ffff00",
     color_menu_hdr_fg      : "000000",
+    color_number_input_bg  : "00ffff",
     color_ore              : "d4af37",
     color_port             : "f0f0f0",
     color_resmap_bg        : "a8a818",
@@ -367,9 +368,12 @@ class Button extends Drawable {
     inside(x, y) {
         return x >= this.x && x < this.x + this.w && y >= this.y && y < this.y + this.h;
     }
-    keystroke(code, down) {
-    }
-    click(down) {
+    mouse(down, x, y) {
+        if (this.holdable && this.inside(x, y)) {
+            this.click(down);
+            return true;
+        }
+        return false;
     }
     draw(gfx, held) {
         if (this.state_fetcher != null)
@@ -388,27 +392,24 @@ class Form extends Drawable {
     constructor(x, y, w, h, bg) {
         super(x, y, w, h);
         this.bg = bg;
-        this.btns = [];
+        this.children = [];
         this.held_btn = null;
     }
-    add(btn) {
-        this.btns.push(btn);
+    add(child) {
+        this.children.push(child);
     }
     update() {
     }
     mouse(down, x, y) {
-        for (const btn of this.btns) {
-            if (btn.holdable && btn.inside(x, y)) {
-                this.held_btn = down ? btn : null;
-                btn.click(down);
-                return;
-            }
+        for (const child of this.children) {
+            if (child.mouse(down, x, y))
+                return true;
         }
-        if (!down) this.held_btn = null;
+        return false;
     }
     draw(gfx) {
         gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
-        for (const btn of this.btns) {
+        for (const btn of this.children) {
             btn.draw(gfx, btn == this.held_btn);
         }
     }
@@ -422,7 +423,6 @@ class MenuButton extends Button {
         this.slot = slot;
     }
     click(down) {
-        super.click(down);
         if (!down) return;
         this.click_menu_button(this.slot);
     }
@@ -430,8 +430,8 @@ class MenuButton extends Button {
 
 // --------------------------------------------------------------------
 class NoMenuButton extends MenuButton {
-    constructor(menu, slot) {
-        super(menu, "No", slot);
+    constructor(menu, title, slot) {
+        super(menu, title, slot);
     }
     click_menu_button(slot) {
         _game.pop_form();
@@ -449,24 +449,88 @@ class YesSellOreMenuButton extends MenuButton {
         this.menu.acct.add_cash(this.menu.price * cargo, "Sale of "+cargo.toString()+" tons ore");
         _game.pop_form();
     }
-}; // class YessSellOreMenuButton
+}; // class YesSellOreMenuButton
 
 // --------------------------------------------------------------------
 class YesBuyFuelMenuButton extends MenuButton {
-    constructor(menu, fuel, slot) {
+    constructor(menu, slot) {
         super(menu, "Yes", slot);
-        this.ship = menu.ship;
-        this.price = menu.price;
-        this.fuel = fuel;
+        this.menu = menu;
     }
     click_menu_button(slot) {
-        const fuel = this.ship.add_fuel(this.fuel);
-        const cost = fuel * this.price;
-        _game.acct.remove_cash(cost, "Buy "+fuel.toString()+" liters fuel");
-        _game.set_stats("Bought "+fuel.toString()+"L fuel for $"+cost.toString());
+        const fuel = this.menu.ship.add_fuel(this.menu.fuel);
+        const cost = fuel * this.menu.price;
+        this.menu.acct.remove_cash(cost, "Buy "+fuel.toString()+" liters fuel");
+        _game.set_status("Bought "+fuel.toString()+"L fuel for $"+cost.toString());
         _game.pop_form();
     }
 }; // class YesBuyFuelMenuButton
+
+// --------------------------------------------------------------------
+class NumberInputButton extends Button {
+    constructor(x, y, w, h, digit, up) {
+        super(up ? ["^"] : ["v"], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
+            0, x, y, w, h);
+        this.digit = digit;
+        this.incr = up ? +1 : -1;
+    }
+    click(down) {
+        if (!down) return;
+        this.digit.value += this.incr;
+        if (this.digit.value < 0)
+            this.digit.value = 0;
+        else if (this.digit.value > 9)
+            this.digit.value = 9;
+    }
+}; // class NumberInputButton
+
+// --------------------------------------------------------------------
+class NumberInputDigit extends Drawable {
+    constructor(x, y, w, h, i) {
+        super(x, y, w, h);
+        const btn_h = Math.floor(h/3);
+        this.up_btn = new NumberInputButton(x, y, w, btn_h, this, true);
+        this.down_btn = new NumberInputButton(x, y+h-btn_h, w, btn_h, this, false);
+        this.digit_char_x = x;
+        this.digit_char_y = y + btn_h;
+        this.digit_char_w = w;
+        this.value = 0;
+    }
+    mouse(down, x, y) {
+        for (const btn of [this.up_btn, this.down_btn]) {
+            if (btn.inside(x, y)) {
+                btn.click(down);
+                return true;
+            }
+        }
+        return false;
+    }
+    draw(gfx) {
+        this.up_btn.draw(gfx, false);
+        this.down_btn.draw(gfx, false);
+        gfx.draw_centered_text(this.digit_char_x, this.digit_char_y, this.digit_char_w, this.value.toString(), config.color_btn_dir);
+    }
+}; // class NumberInputButton
+
+// --------------------------------------------------------------------
+class NumberInput extends Form {
+    constructor(x, y, w, h, num_digits) {
+        super(x, y, w, h, config.color_number_input_bg);
+        const digit_w = w / num_digits;
+        this.digits = [];
+        for (let i = 0; i < num_digits; ++i) {
+            const digit = new NumberInputDigit(x+w-digit_w*(i+1), y, digit_w, h);
+            this.digits.push(digit);
+            this.add(digit);
+        }
+    }
+    get_value() {
+        let v = 0;
+        for (let i = this.digits.length-1; i >= 0; --i)
+            v = (10 * v) + this.digits[i].value;
+        return v;
+    }
+}; // class NumberInput
 
 // --------------------------------------------------------------------
 class Menu extends Form {
@@ -477,12 +541,11 @@ class Menu extends Form {
     set_desc(desc) {
         this.desc = desc;
         //FIXME
-        const desc_h = 40; ///FIXME
         this.btn_w = Math.floor(this.w * 0.6);
-        this.btn_h = Math.floor(this.h / 10);
+        this.btn_h = Math.floor(this.h * 0.10);
         this.btn_sp = Math.floor(this.btn_h * .3);
         this.btn_x = this.x + (this.w - this.btn_w) / 2;
-        this.btn_y = this.y + desc_h + this.btn_h * .75;
+        this.btn_y = this.y + this.btn_h*1.75;
     }
     draw(gfx) {
         super.draw(gfx);
@@ -492,21 +555,72 @@ class Menu extends Form {
 }; // class Menu
 
 // --------------------------------------------------------------------
-class SellOreMenu extends Menu {
+class ConfirmSellOreMenu extends Menu {
     constructor(x, y, w, h, ship, acct, price) {
-        super(x, y, w, h, "");
+        super(x, y, w, h, "Do you want to sell the "+ship.cargo.toString()+" tons of cargo in your ship?");
         this.ship = ship;
         this.acct = acct;
         this.price = price;
     }
     init() {
-        const cargo = this.ship.cargo;
-        this.desc = "Do you want to sell the "+cargo.toString()+" tons of cargo in your ship?";
         this.add(new YesSellOreMenuButton(this, 0));
-        this.add(new NoMenuButton(this, 1));
+        this.add(new NoMenuButton(this, "No", 1));
         return this;
     }
-}; // class SellOreMenu
+}; // class ConfirmSellOreMenu
+
+// --------------------------------------------------------------------
+class ConfirmBuyFuelMenu extends Menu {
+    constructor(x, y, w, h, ship, acct, fuel, price) {
+        super(x, y, w, h, "Do you want to buy "+fuel.toString()+" L of fuel for $"+(fuel*price).toString()+"?");
+        this.ship = ship;
+        this.acct = acct;
+        this.fuel = fuel;
+        this.price = price;
+    }
+    init() {
+        this.add(new YesBuyFuelMenuButton(this, 0));
+        this.add(new NoMenuButton(this, "No", 1));
+        return this;
+    }
+}; // class ConfirmBuyFuelMenu
+
+// --------------------------------------------------------------------
+class OkBuyFuelMenuButton extends MenuButton {
+    constructor(menu, slot) {
+        super(menu, "OK", slot);
+        this.menu = menu;
+    }
+    click_menu_button(slot) {
+        if (_game == null) return;
+        const xb = Math.floor(this.w * 0.20);
+        const yb = xb;
+        const menu = new ConfirmBuyFuelMenu(_game.x+xb, _game.y+yb, _game.w-2*xb, _game.h-2*yb, _game.ship, _game.acct, this.menu.fuel_input.get_value(), this.menu.price);
+        _game.pop_form();
+        _game.forms.push(menu.init());
+    }
+}; // class OkBuyFuelMenuButton 
+
+// --------------------------------------------------------------------
+class BuyFuelMenu extends Menu {
+    constructor(x, y, w, h, ship, acct, price) {
+        super(x, y, w, h, "How much fuel do you want to buy for $"+price.toString()+" per liter?");
+        this.ship = ship;
+        this.acct = acct;
+        this.price = price;
+    }
+    init() {
+        const top = 40;
+        const fih = this.h - this.btn_y - 2*this.btn_h - this.btn_sp - 1.5*this.btn_h;
+        const xmargin = this.w * 0.1;
+        this.fuel_input = new NumberInput(this.x+xmargin, this.btn_y, this.w-2*xmargin, fih, 4);
+        this.add(this.fuel_input);
+        this.btn_y += fih + .75*this.btn_h;
+        this.add(new OkBuyFuelMenuButton(this, 0));
+        this.add(new NoMenuButton(this, "Cancel", 1));
+        return this;
+    }
+}; // class BuyFuelMenu
 
 // --------------------------------------------------------------------
 class SellOreButton extends MenuButton {
@@ -516,7 +630,10 @@ class SellOreButton extends MenuButton {
     }
     click_menu_button(slot) {
         if (_game == null) return;
-        _game.need_sell = this.price;
+        const xb = Math.floor(_game.w * 0.20);
+        const yb = xb;
+        const menu = new ConfirmSellOreMenu(_game.x+xb, _game.y+yb, _game.w-2*xb, _game.h-2*yb, _game.ship, _game.acct, this.price);
+        _game.forms.push(menu.init());
     }
 }; // class SellOreButton
 
@@ -524,9 +641,14 @@ class SellOreButton extends MenuButton {
 class BuyFuelButton extends MenuButton {
     constructor(menu, price) {
         super(menu, "Buy fuel at $"+price.toString()+" per liter", 1);
+        this.price = price;
     }
     click_menu_button(slot) {
-        ///FIXME
+        if (_game == null) return;
+        const xb = Math.floor(this.w * 0.20);
+        const yb = xb;
+        const menu = new BuyFuelMenu(_game.x+xb, _game.y+yb, _game.w-2*xb, _game.h-2*yb, _game.ship, _game.acct, this.price);
+        _game.forms.push(menu.init());
     }
 }; // class BuyFuelButton
 
@@ -1271,7 +1393,6 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.status = null;
         this.message = null;
         this.forms = [ this.dash ];
-        this.need_sell = -1;
     }
     exit_port() {
         this.ship.exit_port();
@@ -1313,12 +1434,19 @@ this.ship.add_fuel(this.ship.max_fuel/3);
                 const loaded = ship.prospect(this.deposits);
             }
         }
-        if (this.need_sell >= 0) {
+        if (this.need_confirm_buy_fuel) {
             const xb = Math.floor(this.w * 0.20);
             const yb = xb;
-            const menu = new SellOreMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.acct, this.need_sell);
+            const menu = new ConfirmBuyFuelMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.acct, this.need_confirm_buy_fuel, ship.port.buy_fuel_price());
             this.forms.push(menu.init());
-            this.need_sell = -1;
+            this.need_confirm_buy_fuel = -1;
+        }
+        if (this.need_buy_fuel >= 0) {
+            const xb = Math.floor(this.w * 0.20);
+            const yb = xb;
+            const menu = new BuyFuelMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.acct, this.need_buy_fuel);
+            this.forms.push(menu.init());
+            this.need_buy_fuel = -1;
         }
     }
     set_status(status) {
@@ -1357,7 +1485,6 @@ this.ship.add_fuel(this.ship.max_fuel/3);
     }
     event_keystroke(code, down) {
         this.set_thrust(code, down);
-        //this.draw();
     }
     event_mouse(down, x, y) {
         if (this.forms.length == 0) return;
