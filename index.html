@@ -6,6 +6,7 @@
 </head>
 <body onload="main()">
 <canvas id="canvas" width="1" height="1" style="font-family:Arial"></canvas>
+<canvas id="canvas2" width="100" height="100" style="font-family:Arial; display:none"></canvas>
 <script>
 
 /** TODO
@@ -46,9 +47,6 @@ var config = {
     ship_side_thrust       : 0.01,
     terr_base              : 24, // pixels
     terr_step              : 22, // pixels
-    view_width_m           : 1500,
-    view_xstep_m           : 50,
-    ///world_diam             : 1000*1000, // 1000 km
 
     color_btn_active       : "10ff40",
     color_btn_active_fg    : "000000",
@@ -134,10 +132,12 @@ class Vector {
 
 // --------------------------------------------------------------------
 class Graphics {
-    constructor(ctx) {
+    constructor(ctx, font_size) {
         this.ctx = ctx;
+        ctx.font = Math.floor(font_size).toString()+"px sans-serif";
+        this.font_height = font_size;
+if (false){
         const text_size = ctx.measureText("M");
-        ///this.font_height = Math.floor(text_size.width * 1.2); // FIXME
         const font_style = '';
         const body = document.getElementsByTagName('body')[0];
         const dummy = document.createElement('div');
@@ -147,6 +147,7 @@ class Graphics {
         body.appendChild(dummy);
         this.font_height = dummy.offsetHeight;
         body.removeChild(dummy);
+}
     }
     clear(color) {
         const canvas = this.ctx.canvas;
@@ -761,30 +762,40 @@ class FlyingButton extends Button {
 }; // class LSIButton
 
 // --------------------------------------------------------------------
-class OreDetectorButton extends Button {
-    constructor(x, y, w, h) {
+class OreMapButton extends Button {
+    constructor(x, y, w, h, dash) {
         super(["Ore detector: off", "Ore detector: on", "Ore detector: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
-            2, x, y, w, h);
+            0, x, y, w, h);
         this.holdable = (this.state != 2);
+        this.dash = dash;
     }
     click(down) {
         if (!down) return;
+        if (this.dash.ore_map == null) return;
+        const active = !this.dash.ore_map.active;
+        this.dash.ore_map.active = active;
+        this.set_state(active ? 1 : 0);
     }
-}; // class OreDetectorButton
+}; // class OreMapButton
 
 // --------------------------------------------------------------------
 class PortMapButton extends Button {
-    constructor(x, y, w, h) {
+    constructor(x, y, w, h, dash) {
         super(["Port map: off", "Port map: on", "Port map: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
-            2, x, y, w, h);
+            0, x, y, w, h);
         this.holdable = (this.state != 2);
+        this.dash = dash;
     }
     click(down) {
         if (!down) return;
+        if (this.dash.port_map == null) return;
+        const active = !this.dash.port_map.active;
+        this.dash.port_map.active = active;
+        this.set_state(active ? 1 : 0);
     }
 }; // class PortMapButton
 
@@ -809,34 +820,68 @@ class SouthButton extends Button {
 
 // --------------------------------------------------------------------
 class ResourceMap extends Drawable {
-    constructor(x, y, w, h) {
+    constructor(x, y, w, h, range) {
         super(x, y, w, h);
-        this.installed = false;
+        this.ship = null;
+        this.objects = null;
         this.active = false;
+        this.range2 = range/2;
     }
-    install(ship) {
-        this.installed = true;
-    }
-    activate(active) {
-        this.active = active;
+    install(ship, objects) {
+        this.ship = ship;
+        this.objects = objects;
     }
     draw(gfx) {
+        const canvas2 = el("canvas2");
+        canvas2.width = this.w;
+        canvas2.height = this.h;
+        const gfx2 = new Graphics(canvas2.getContext("2d"), this.h*0.25);
         const color = this.active ? config.color_resmap_bg : this.installed ? config.color_btn_inactive : config.color_btn_none;
-        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, config.gauge_border, config.gauge_border, color, config.color_sky); 
+        gfx2.draw_outlined_rect(0, 0, this.w, this.h, config.gauge_border, config.gauge_border, color, config.color_sky); 
+        if (this.active) {
+            gfx2.draw_rect(0, this.h/2 - 1, this.w, 2, config.color_sky);
+            gfx2.draw_circle(this.w/2, this.h/2, 4, config.color_sky);
+            gfx2.draw_circle(this.w/2, this.h/2, 3, config.color_ship);
+            const resources = this.objects.get_list(this.ship.loc.x - this.range2, this.ship.loc.x + this.range2);
+            for (const res of resources) {
+                const x = (res.xpos - this.ship.loc.x + this.range2) * this.w / (this.range2*2);
+                const y = this.h/2;
+                this.draw_object(gfx2, res, x, y);
+            }
+        }
+        gfx.ctx.drawImage(canvas2, this.x, this.y);
     }
 }; // class ResourceMap
 
 // --------------------------------------------------------------------
-class OreDetector extends ResourceMap {
-    constructor(x, y, w, h) {
-        super(x, y, w, h);
+class OreMap extends ResourceMap {
+    constructor(x, y, w, h, range) {
+        super(x, y, w, h, range);
     }
-}; // class OreDetector
+    draw_object(gfx, ore, x, y) {
+        if (ore.mass == 0) return;
+        const mass = ore.mass.toString();
+        const mass_size = gfx.measure_text(mass);
+        const bh = 5;
+        gfx.draw_rect(x-1, y-bh, 2, bh*2, config.color_sky);
+        gfx.draw_text(x-mass_size.width/2, y-bh-mass_size.height, mass, config.color_sky);
+    }
+}; // class OreMap
 
 // --------------------------------------------------------------------
 class PortMap extends ResourceMap {
-    constructor(x, y, w, h) {
-        super(x, y, w, h);
+    constructor(x, y, w, h, range) {
+        super(x, y, w, h, range);
+    }
+    draw_object(gfx, port, x, y) {
+        const ore_price = port.sell_ore_price().toString();
+        const fuel_price = port.buy_fuel_price().toString();
+        const ore_price_size = gfx.measure_text(ore_price);
+        const fuel_price_size = gfx.measure_text(fuel_price);
+        const bh = 5;
+        gfx.draw_rect(x-1, y-bh, 2, bh*2, config.color_sky);
+        gfx.draw_text(x-ore_price_size.width/2, y-bh-ore_price_size.height, ore_price, config.color_sky);
+        gfx.draw_text(x-fuel_price_size.width/2, y+bh, fuel_price, config.color_sky);
     }
 }; // class PortMap
 
@@ -965,10 +1010,19 @@ class TerrObjects extends Drawable {
     closest(xpos) {
         if (this.objects.length == 0) return null;
         let i = this.index(xpos);
+        if (i < 0) return null;
         if (i < this.objects.length-1 &&
             Math.abs(this.objects[i].xpos - xpos) > Math.abs(this.objects[i+1].xpos - xpos))
             ++i;
         return this.objects[i];
+    }
+    get_list(sxpos, expos) {
+        this.cover(sxpos, expos);
+        let list = [];
+        for (let i = this.index(sxpos); i >= 0 && i < this.objects.length && this.objects[i].xpos < expos; ++i) {
+            list.push(this.objects[i]);
+        }
+        return list;
     }
     draw(gfx, xpos, boty) {
         if (this.objects.length == 0) return;
@@ -996,6 +1050,24 @@ class Ports extends TerrObjects {
         return null;
     }
 }; // class Ports
+
+// --------------------------------------------------------------------
+class Port {
+    constructor(xpos) {
+        this.xpos = xpos;
+        this.name = "Omega Station";
+    }
+    buy_fuel_price() {
+        return 50; // FIXME
+    }
+    sell_ore_price() {
+        return 230; // FIXME
+    }
+    draw(gfx, x, y) {
+        gfx.draw_circle(x, y, config.port_land_max_dist, config.color_port);
+        gfx.draw_text(x-30, y-40, this.name, config.color_port);
+    }
+}; // class Port
 
 // --------------------------------------------------------------------
 class OreDeposits extends TerrObjects {
@@ -1031,24 +1103,6 @@ class Billboard {
     constructor() {
     }
 }; // class Billboard
-
-// --------------------------------------------------------------------
-class Port {
-    constructor(xpos) {
-        this.xpos = xpos;
-        this.name = "Omega Station";
-    }
-    buy_fuel_price() {
-        return 50; // FIXME
-    }
-    sell_ore_price() {
-        return 230; // FIXME
-    }
-    draw(gfx, x, y) {
-        gfx.draw_circle(x, y, config.port_land_max_dist, config.color_port);
-        gfx.draw_text(x-30, y-40, this.name, config.color_port);
-    }
-}; // class Port
 
 // --------------------------------------------------------------------
 class LiveView extends Drawable {
@@ -1335,14 +1389,14 @@ class Dash extends Form {
         this.alt_gauge = new AltitudeGauge(p1x, y+b, gw, gh, ship, terrain);
         this.ore_gauge = new OreGauge(p1x+gw+b, y+b, gw, gh, ship);
         this.fuel_gauge = new FuelGauge(p1x+2*(gw+b), y+b, gw, gh, ship);
-        this.ore_detector = new OreDetector(p4x, y+b, p4w, b3h);
-        this.port_map = new PortMap(p4x, p3y2, p4w, b3h);
+        this.ore_map = new OreMap(p4x, y+b, p4w, b3h, w*5);
+        this.port_map = new PortMap(p4x, p3y2, p4w, b3h, w*5);
         this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h);
         this.add(new ScoopButton(p3x, y+b, b3w, b3h));
         this.add(new LSIButton(p3x, p3y2, b3w, b3h));
         this.add(new FlyingButton(p3x, p3y3, b3w, b3h, ship));
-        this.add(new OreDetectorButton(p3x2, y+b, b3w, b3h));
-        this.add(new PortMapButton(p3x2, p3y2, b3w, b3h));
+        this.add(new OreMapButton(p3x2, y+b, b3w, b3h, this));
+        this.add(new PortMapButton(p3x2, p3y2, b3w, b3h, this));
         this.add(new LiveStatusButton(p3x2, p3y3, b3w, b3h));
         this.add(new SouthButton(p2x + (p2w-dirw)/2, y + h/2, dirw, dirh));
     }
@@ -1351,10 +1405,11 @@ class Dash extends Form {
     }
     draw(gfx) {
         super.draw(gfx);
+        gfx.draw_rect(this.x, this.y, this.w, this.h*.015, config.color_sky);
         this.alt_gauge.draw(gfx);
         this.ore_gauge.draw(gfx);
         this.fuel_gauge.draw(gfx);
-        this.ore_detector.draw(gfx);
+        this.ore_map.draw(gfx);
         this.port_map.draw(gfx);
         this.live_status.draw(gfx);
     }
@@ -1372,11 +1427,10 @@ class Game {
         this.y = 0;
         this.w = cw;
         this.h = ch;
-        const space = Math.floor(ch*.005);
         const dash_h = Math.floor(ch*.35);
         const dash_y = ch - dash_h;
         const view_y = 0;
-        const view_h = dash_y - space - view_y;
+        const view_h = dash_y - view_y;
         const mb = Math.floor(ch*.25);
 
         this.playing = true;
@@ -1393,6 +1447,8 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.status = null;
         this.message = null;
         this.forms = [ this.dash ];
+this.dash.ore_map.install(this.ship, this.deposits);
+this.dash.port_map.install(this.ship, this.ports);
     }
     exit_port() {
         this.ship.exit_port();
@@ -1579,8 +1635,7 @@ function main() {
     munge_config();
     canvas_resize();
     const canvas = el("canvas");
-    const gfx = new Graphics(canvas.getContext("2d"));
-    gfx.ctx.font = Math.floor(canvas.height*.028).toString()+"px sans-serif";
+    const gfx = new Graphics(canvas.getContext("2d"), canvas.height*.028);
     _game = new Game(gfx);
     document.addEventListener('keyup', Game._event_keyup);
     document.addEventListener('keydown', Game._event_keydown);
