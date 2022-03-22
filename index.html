@@ -30,6 +30,7 @@ var config = {
     low_fuel               : 10,
     max_fuel               : 100,
     menu_border            : 4,
+    menu_yfrac             : .75,
     min_elev               : 10,
     ore_mass_max           : 60,
     ore_mass_min           : 8,
@@ -573,12 +574,14 @@ class OkBuyFuelMenuButton extends MenuButton {
     constructor(menu, slot) {
         super(menu, "OK", slot);
         this.menu = menu;
+        this.menurect = { x:menu.x, y:menu.y, w:menu.w, h:menu.h }; 
     }
     click_menu_button(slot) {
         if (_game == null) return;
         const xb = Math.floor(this.w * 0.20);
         const yb = xb;
-        const menu = new ConfirmBuyFuelMenu(_game.x+xb, _game.y+yb, _game.w-2*xb, _game.h-2*yb, _game.ship, _game.acct, this.menu.fuel_input.get_value(), this.menu.price);
+        const menu = new ConfirmBuyFuelMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h, 
+            _game.ship, _game.acct, this.menu.fuel_input.get_value(), this.menu.price);
         _game.pop_form();
         _game.forms.push(menu.init());
     }
@@ -610,12 +613,13 @@ class SellOreButton extends MenuButton {
     constructor(menu, price) {
         super(menu, "Sell ore at $"+price.toString()+" per ton", 0);
         this.price = price;
+        this.menurect = { x:menu.x, y:menu.y, w:menu.w, h:menu.h }; 
     }
     click_menu_button(slot) {
         if (_game == null) return;
         const xb = Math.floor(_game.w * 0.10);
         const yb = xb;
-        const menu = new ConfirmSellOreMenu(_game.x+xb, _game.y+yb, _game.w-2*xb, _game.h-2*yb, _game.ship, _game.acct, this.price);
+        const menu = new ConfirmSellOreMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h, _game.ship, _game.acct, this.price);
         _game.forms.push(menu.init());
     }
 }; // class SellOreButton
@@ -625,12 +629,13 @@ class BuyFuelButton extends MenuButton {
     constructor(menu, price) {
         super(menu, "Buy fuel at $"+price.toString()+" per liter", 1);
         this.price = price;
+        this.menurect = { x:menu.x, y:menu.y, w:menu.w, h:menu.h }; 
     }
     click_menu_button(slot) {
         if (_game == null) return;
         const xb = Math.floor(this.w * 0.10);
         const yb = xb;
-        const menu = new BuyFuelMenu(_game.x+xb, _game.y+yb, _game.w-2*xb, _game.h-2*yb, _game.ship, _game.acct, this.price);
+        const menu = new BuyFuelMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h,  _game.ship, _game.acct, this.price);
         _game.forms.push(menu.init());
     }
 }; // class BuyFuelButton
@@ -1486,10 +1491,12 @@ class Game {
         const dash_y = ch - dash_h;
         const view_y = 0;
         const view_h = dash_y - view_y;
-        const mb = Math.floor(ch*.25);
 
         this.playing = true;
-        this.msgrect = { x:mb, y:mb, w:cw-2*mb, h:ch-2*mb };
+        const xb = cw*.05;
+        const yb = 0;
+        this.msgrect = { x:xb, y:yb, w:cw-2*xb, h:view_h*config.menu_yfrac };
+        this.menurect = this.msgrect;
         this.terrain = new Terrain(0, view_y, cw, view_h);
         this.ports = new Ports(0, view_y, cw, view_h, this.terrain);
         this.deposits = new OreDeposits(0, view_y, cw, view_h, this.terrain);
@@ -1537,9 +1544,8 @@ this.dash.port_map.install(this.ship, this.ports);
             const land_port = this.view.ports.can_land(ship.loc.x);
             if (land_port != null) {
                 ship.enter_port(land_port);
-                const xb = Math.floor(this.w * 0.10);
-                const yb = xb;
-                const menu = new PortMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, land_port, this.acct);
+                const r = this.menurect;
+                const menu = new PortMenu(r.x, r.y, r.w, r.h, land_port, this.acct);
                 this.forms.push(menu.init());
             } else {
                 const loaded = ship.prospect(this.deposits);
