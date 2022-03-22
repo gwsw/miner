@@ -9,12 +9,6 @@
 <canvas id="canvas2" width="100" height="100" style="font-family:Arial; display:none"></canvas>
 <script>
 
-/** TODO
-> Port menu
-> View follow y height of ship.
-> Direction arrows.
-**/
-
 // --------------------------------------------------------------------
 // Globals
 var _game = null;
@@ -37,9 +31,11 @@ var config = {
     max_fuel               : 100,
     menu_border            : 4,
     min_elev               : 10,
-    ore_mass_max           : 1000,
+    ore_mass_max           : 60,
     ore_mass_min           : 8,
+    ore_sep                : 120,
     port_screens_per       : 5,
+    port_sep               : 1000,
     port_land_max_dist     : 10,
     ship_bot_thrust        : 0.004,
     ship_mass              : 50,
@@ -56,6 +52,9 @@ var config = {
     color_btn_inactive_fg  : "000000",
     color_btn_none         : "a0a0a0",
     color_btn_none_fg      : "383838",
+    color_clock_bg         : "e0e0e0",
+    color_clock_border     : "000000",
+    color_clock_fg         : "000000",
     color_dash_bg          : "669ae4",
     color_fuel             : "10d040",
     color_gauge_bg         : "e0e0e0",
@@ -136,18 +135,6 @@ class Graphics {
         this.ctx = ctx;
         ctx.font = Math.floor(font_size).toString()+"px sans-serif";
         this.font_height = font_size;
-if (false){
-        const text_size = ctx.measureText("M");
-        const font_style = '';
-        const body = document.getElementsByTagName('body')[0];
-        const dummy = document.createElement('div');
-        const dummy_text = document.createTextNode('M');
-        dummy.appendChild(dummy_text);
-        dummy.setAttribute('style', font_style+'position:absolute;top:0;left:0');
-        body.appendChild(dummy);
-        this.font_height = dummy.offsetHeight;
-        body.removeChild(dummy);
-}
     }
     clear(color) {
         const canvas = this.ctx.canvas;
@@ -277,12 +264,6 @@ class Drawable {
 }; // class Drawable
 
 // --------------------------------------------------------------------
-class DashClock {
-    constructor() {
-    }
-}; // class DashClock
-
-// --------------------------------------------------------------------
 class Gauge extends Drawable {
     constructor(x, y, w, h, title, color, max_value, low_value = -1, crit_value = -1, fetcher = null) {
         super(x, y, w, h);
@@ -316,6 +297,7 @@ class Gauge extends Drawable {
         const value_text_size = gfx.measure_text(value_text);
         gfx.draw_outlined_rect(this.x, bot-gh, this.w, gh, gb, gb, config.color_gauge_bg, config.color_sky);
         gfx.draw_rect(this.x+gb, bot-gb-barh, inw, barh, this.color);
+        ///gfx.draw_rect(this.x+gb, bot-gb-barh-2, inw, 2, this.color.darker(.5));
         gfx.draw_centered_text(this.x, bot-value_text_size.height*1.5, this.w, value_text, config.color_gauge_text);
         let ctext = null;
         let ccolor = null;
@@ -631,7 +613,7 @@ class SellOreButton extends MenuButton {
     }
     click_menu_button(slot) {
         if (_game == null) return;
-        const xb = Math.floor(_game.w * 0.20);
+        const xb = Math.floor(_game.w * 0.10);
         const yb = xb;
         const menu = new ConfirmSellOreMenu(_game.x+xb, _game.y+yb, _game.w-2*xb, _game.h-2*yb, _game.ship, _game.acct, this.price);
         _game.forms.push(menu.init());
@@ -646,7 +628,7 @@ class BuyFuelButton extends MenuButton {
     }
     click_menu_button(slot) {
         if (_game == null) return;
-        const xb = Math.floor(this.w * 0.20);
+        const xb = Math.floor(this.w * 0.10);
         const yb = xb;
         const menu = new BuyFuelMenu(_game.x+xb, _game.y+yb, _game.w-2*xb, _game.h-2*yb, _game.ship, _game.acct, this.price);
         _game.forms.push(menu.init());
@@ -706,21 +688,9 @@ class PortMenu extends Menu {
         this.set_desc(this.get_desc());
     }
     get_desc() {
-        return "Welcome to port "+this.port.name+"!\nYou have $"+this.acct.balance+".";
+        return "Welcome to "+this.port.name+"!\nYou have $"+this.acct.balance+".";
     }
 }; // class PortMenu
-
-// --------------------------------------------------------------------
-class Store {
-constructor() {
-}
-}; // class Store
-
-// --------------------------------------------------------------------
-class StoreMenu {
-    constructor() {
-    }
-}; // class StoreMenu
 
 // --------------------------------------------------------------------
 class ScoopButton extends Button {
@@ -808,15 +778,52 @@ class LiveStatusButton extends Button {
 }; // class LiveStatusButton
 
 // --------------------------------------------------------------------
-class SouthButton extends Button {
+class NorthButton extends Button {
     constructor(x, y, w, h) {
-        super(["UP"], [config.color_btn_dir], [config.color_btn_dir_fg],
+        super(["\u25b2"], [config.color_btn_dir], [config.color_btn_dir_fg],
             0, x, y, w, h);
+        this.holdable = true;
     }
     click(down) {
-        if (_game != null) _game.keystroke("ArrowDown", down);
+        if (_game != null) _game.event_keystroke("ArrowUp", down);
+    }
+}; // class NorthButton
+
+// --------------------------------------------------------------------
+class SouthButton extends Button {
+    constructor(x, y, w, h) {
+        super(["\u25bc"], [config.color_btn_dir], [config.color_btn_dir_fg],
+            0, x, y, w, h);
+        this.holdable = true;
+    }
+    click(down) {
+        if (_game != null) _game.event_keystroke("ArrowDown", down);
     }
 }; // class SouthButton
+
+// --------------------------------------------------------------------
+class EastButton extends Button {
+    constructor(x, y, w, h) {
+        super(["\u25b6"], [config.color_btn_dir], [config.color_btn_dir_fg],
+            0, x, y, w, h);
+        this.holdable = true;
+    }
+    click(down) {
+        if (_game != null) _game.event_keystroke("ArrowRight", down);
+    }
+}; // class EastButton
+
+// --------------------------------------------------------------------
+class WestButton extends Button {
+    constructor(x, y, w, h) {
+        super(["\u25c0"], [config.color_btn_dir], [config.color_btn_dir_fg],
+            0, x, y, w, h);
+        this.holdable = true;
+    }
+    click(down) {
+        if (_game != null) _game.event_keystroke("ArrowLeft", down);
+    }
+}; // class WestButton
 
 // --------------------------------------------------------------------
 class ResourceMap extends Drawable {
@@ -832,9 +839,7 @@ class ResourceMap extends Drawable {
         this.objects = objects;
     }
     draw(gfx) {
-        const canvas2 = el("canvas2");
-        canvas2.width = this.w;
-        canvas2.height = this.h;
+        const canvas2 = canvas_size("canvas2", this.w, this.h);
         const gfx2 = new Graphics(canvas2.getContext("2d"), this.h*0.25);
         const color = this.active ? config.color_resmap_bg : this.installed ? config.color_btn_inactive : config.color_btn_none;
         gfx2.draw_outlined_rect(0, 0, this.w, this.h, config.gauge_border, config.gauge_border, color, config.color_sky); 
@@ -848,6 +853,9 @@ class ResourceMap extends Drawable {
                 const y = this.h/2;
                 this.draw_object(gfx2, res, x, y);
             }
+            const rw = _game.w * this.w / (this.range2*2);
+            const fh = 0.6;
+            gfx2.draw_outline((this.w-rw)/2, this.h*(1-fh)/2, rw, this.h*fh, 1, 1, config.color_sky);
         }
         gfx.ctx.drawImage(canvas2, this.x, this.y);
     }
@@ -972,14 +980,17 @@ this.cover(xpos-1000, xpos+1000); // FIXME
 
 // --------------------------------------------------------------------
 class TerrObjects extends Drawable {
-    constructor(x, y, w, h, terrain, screens_per) {
+    constructor(x, y, w, h, terrain, screens_per, sep) {
         super(x, y, w, h);
         this.empty_extend = true;
         this.terrain = terrain;
         this.screens_per = screens_per;
+        this.sep = sep;
         this.objects = [];
     }
     place(xpos) {
+       const close = this.closest(xpos);
+       if (close != null && Math.abs(close.xpos - xpos) < this.sep) return false;
        const mag = 10;
        const r = (randu(this.screens_per * this.w * mag));
        return (r  < mag);
@@ -1038,7 +1049,7 @@ class TerrObjects extends Drawable {
 // --------------------------------------------------------------------
 class Ports extends TerrObjects {
     constructor(x, y, w, h, terrain) {
-        super(x, y, w, h, terrain, config.port_screens_per);
+        super(x, y, w, h, terrain, config.port_screens_per, config.port_sep);
     }
     new_object(xpos) {
         return new Port(xpos);
@@ -1055,13 +1066,19 @@ class Ports extends TerrObjects {
 class Port {
     constructor(xpos) {
         this.xpos = xpos;
-        this.name = "Omega Station";
+        this.name = this.random_name(xpos) + " Station";
+        this.fuel_price = 20 + Math.floor(Math.random() * 80);
+        this.ore_price = 200 + Math.floor(Math.random() * 200);
     }
     buy_fuel_price() {
-        return 50; // FIXME
+        return this.fuel_price;
     }
     sell_ore_price() {
-        return 230; // FIXME
+        return this.ore_price;
+    }
+    random_name(xpos) {
+        const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Sigma", "Tau", "Omega"];
+        return names[zmod(Math.floor(xpos/40), names.length)];
     }
     draw(gfx, x, y) {
         gfx.draw_circle(x, y, config.port_land_max_dist, config.color_port);
@@ -1072,7 +1089,7 @@ class Port {
 // --------------------------------------------------------------------
 class OreDeposits extends TerrObjects {
     constructor(x, y, w, h, terrain) {
-        super(x, y, w, h, terrain, config.deposit_screens_per);
+        super(x, y, w, h, terrain, config.deposit_screens_per, config.ore_sep);
     }
     new_object(xpos) {
         return new OreDeposit(this.ore_mass(xpos), xpos);
@@ -1167,7 +1184,21 @@ class Account {
 
 // --------------------------------------------------------------------
 class Loan {
-    constructor() {
+    constructor(amt) {
+        this.amt = amt;
+        this.due = now() + this.term(amt);
+        this.payoff = amt * (1+this.interest(amt));
+    }
+    term(amt) {
+        return 100; ///FIXME
+    }
+    interest(amt) {
+        return 0.10; ///FIXME
+    }
+    check_due(acct) {
+        if (now() < this.due)
+            return 0;
+    @@@
     }
 }; // class Loan
 
@@ -1236,7 +1267,7 @@ class Ship extends MassiveObject {
         this.fuel -= fuel;
         if (this.fuel < 0) {
             this.fuel = 0;
-            Game._game_over("Your ship ran out of fuel!");
+            _game.game_over("Your ship ran out of fuel!");
         }
     }
     set_bot_thrust(on, supercharge = false) {
@@ -1293,7 +1324,7 @@ class Ship extends MassiveObject {
             this.accelerate(this.side_thrust, this.bot_thrust - config.gravity);
     }
     set_status(msg) {
-        Game._set_status(msg); // FIXME
+        _game.set_status(msg); // FIXME
     }
     draw(gfx, xpos, boty) {
         const x = this.x + this.loc.x - xpos;
@@ -1365,23 +1396,43 @@ class ShipFlyingStateFetcher {
 };
 
 // --------------------------------------------------------------------
+class DashClock extends Drawable {
+    constructor(x, y, w, h) {
+        super(x, y, w, h);
+    }
+    draw(gfx) {
+        const time = new Date();
+        const sec = time.getSeconds();
+        const min = time.getMinutes();
+        const hr = time.getHours();
+        const time_str = hr.toString()+":"+min.toString().padStart(2,"0")+":"+sec.toString().padStart(2,"0");
+        const time_size = gfx.measure_text(time_str);
+        const b = 2;
+        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, b, b, config.color_clock_bg, config.color_clock_border);
+        gfx.draw_centered_text(this.x, this.y+(this.h-time_size.height)/2, this.w, time_str, config.color_clock_fg);
+    }
+}; // class DashClock
+
+// --------------------------------------------------------------------
 class Dash extends Form {
     constructor(x, y, w, h, ship, terrain) {
         const b   = w * .01;
-        const p1w = w * .12;
-        const p2w = w * .16;
+        const yc = y + h/2;
+        const p1w = w * .16;
+        const p2w = w * .12;
         const p3w = w * .30;
         const p4w = w - (p1w + p2w + p3w + 5*b);
         const p1x = x + b;
         const p2x = p1x + p1w + b;
         const p3x = p2x + p2w + b;
         const p4x = p3x + p3w + b;
-        const gw = Math.floor((p2w-2*b)/ 3);
+        const gw = Math.floor((p1w-2*b)/ 3);
         const gh = h - 2*b;
         const dirw = p2w * 0.25;
         const dirh = dirw;
         const b3w = (p3w-b) / 2;
         const b3h = Math.floor((h-4*b) / 3);
+        const p2yc = yc + dirh*2;
         const p3x2 = p3x + b3w + b;
         const p3y2 = y+b+b3h+b;
         const p3y3 = p3y2+b3h+b;
@@ -1398,7 +1449,11 @@ class Dash extends Form {
         this.add(new OreMapButton(p3x2, y+b, b3w, b3h, this));
         this.add(new PortMapButton(p3x2, p3y2, b3w, b3h, this));
         this.add(new LiveStatusButton(p3x2, p3y3, b3w, b3h));
-        this.add(new SouthButton(p2x + (p2w-dirw)/2, y + h/2, dirw, dirh));
+        this.add(new NorthButton(p2x + (p2w-dirw)/2, yc-dirh*1.5, dirw, dirh));
+        this.add(new SouthButton(p2x + (p2w-dirw)/2, yc+dirh/2, dirw, dirh));
+        this.add(new EastButton(p2x + p2w/2 + dirw/2, yc-dirh/2, dirw, dirh));
+        this.add(new WestButton(p2x + p2w/2 - dirw*1.5, yc-dirh/2, dirw, dirh));
+        this.add(new DashClock(p2x, p2yc, p2w, y+h-b-p2yc));
     }
     set_status(status) {
         this.live_status.set_status(status);
@@ -1490,20 +1545,6 @@ this.dash.port_map.install(this.ship, this.ports);
                 const loaded = ship.prospect(this.deposits);
             }
         }
-        if (this.need_confirm_buy_fuel) {
-            const xb = Math.floor(this.w * 0.20);
-            const yb = xb;
-            const menu = new ConfirmBuyFuelMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.acct, this.need_confirm_buy_fuel, ship.port.buy_fuel_price());
-            this.forms.push(menu.init());
-            this.need_confirm_buy_fuel = -1;
-        }
-        if (this.need_buy_fuel >= 0) {
-            const xb = Math.floor(this.w * 0.20);
-            const yb = xb;
-            const menu = new BuyFuelMenu(this.x+xb, this.y+yb, this.w-2*xb, this.h-2*yb, ship, this.acct, this.need_buy_fuel);
-            this.forms.push(menu.init());
-            this.need_buy_fuel = -1;
-        }
     }
     set_status(status) {
         this.dash.set_status(status);
@@ -1521,9 +1562,6 @@ this.dash.port_map.install(this.ship, this.ports);
         }
         this.draw_message();
     }
-    static _set_status(status) { // kinda ugly
-        if (_game != null) _game.set_status(status);
-    }
     static _event_keydown(e) {
         if (_game != null) _game.event_keystroke(e.code, true);
     }
@@ -1535,9 +1573,6 @@ this.dash.port_map.install(this.ship, this.ports);
     }
     static _event_mouseup(e) {
         if (_game != null) _game.event_mouse(false, e.offsetX, e.offsetY);
-    }
-    static _game_over(msg) {
-        if (_game != null) _game.game_over(msg);
     }
     event_keystroke(code, down) {
         this.set_thrust(code, down);
@@ -1587,13 +1622,6 @@ function run_game() {
     window.requestAnimationFrame(run_game);
 }
 
-function canvas_resize() {
-    const s = 20;
-    const canvas = el("canvas");
-    canvas.width = window.innerWidth - s;
-    canvas.height = window.innerHeight - s;
-}
-
 function munge_config() {
     for (const [key,value] of Object.entries(config)) {
         if (key.substr(0,6) == "color_")
@@ -1612,12 +1640,8 @@ function hex2(n) {
 }
 
 function nhash(n) {
-    let r = 0;
-    for (let i = 0; i < 32; ++i) {
-        const bit = n ^ (n >> 2) ^ (n >> 3) ^ (n >> 5);
-        n = (n >> 1) | (bit << 15);
-    }
-    return Math.abs(n);
+    n = n*n;
+    return (n >> 8) & 0xffff;
 }
 
 function zmod(x, m) {
@@ -1631,10 +1655,21 @@ function randu(n) {
     return Math.floor(Math.random() * n);
 }
 
+function canvas_size(name, w, h) {
+    const canvas = el(name);
+    canvas.width = w;
+    canvas.height = h;
+    return canvas;
+}
+
+function canvas_resize() {
+    const s = 20;
+    return canvas_size("canvas", window.innerWidth - s, window.innerHeight - s);
+}
+
 function main() {
     munge_config();
-    canvas_resize();
-    const canvas = el("canvas");
+    const canvas = canvas_resize();
     const gfx = new Graphics(canvas.getContext("2d"), canvas.height*.028);
     _game = new Game(gfx);
     document.addEventListener('keyup', Game._event_keyup);
