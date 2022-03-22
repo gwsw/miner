@@ -349,6 +349,9 @@ class Button extends Drawable {
     set_state(state) {
         this.state = state;
     }
+    set_title(title) {
+        this.state_titles[this.state] = title;
+    }
     inside(x, y) {
         return x >= this.x && x < this.x + this.w && y >= this.y && y < this.y + this.h;
     }
@@ -578,8 +581,6 @@ class OkBuyFuelMenuButton extends MenuButton {
     }
     click_menu_button(slot) {
         if (_game == null) return;
-        const xb = Math.floor(this.w * 0.20);
-        const yb = xb;
         const menu = new ConfirmBuyFuelMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h, 
             _game.ship, _game.acct, this.menu.fuel_input.get_value(), this.menu.price);
         _game.pop_form();
@@ -617,8 +618,6 @@ class SellOreButton extends MenuButton {
     }
     click_menu_button(slot) {
         if (_game == null) return;
-        const xb = Math.floor(_game.w * 0.10);
-        const yb = xb;
         const menu = new ConfirmSellOreMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h, _game.ship, _game.acct, this.price);
         _game.forms.push(menu.init());
     }
@@ -633,22 +632,23 @@ class BuyFuelButton extends MenuButton {
     }
     click_menu_button(slot) {
         if (_game == null) return;
-        const xb = Math.floor(this.w * 0.10);
-        const yb = xb;
         const menu = new BuyFuelMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h,  _game.ship, _game.acct, this.price);
         _game.forms.push(menu.init());
     }
 }; // class BuyFuelButton
 
 // --------------------------------------------------------------------
-class BorrowButton extends MenuButton {
+class LoanButton extends MenuButton {
     constructor(menu) {
         super(menu, "Borrow money", 2);
+        this.menurect = { x:menu.x, y:menu.y, w:menu.w, h:menu.h }; 
     }
     click_menu_button(slot) {
-        ///FIXME
+        if (_game == null) return;
+        const menu = new LoanMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h,  _game.acct);
+        _game.forms.push(menu.init());
     }
-}; // class BorrowButton
+}; // class LoanButton
 
 // --------------------------------------------------------------------
 class EStoreButton extends MenuButton {
@@ -683,7 +683,7 @@ class PortMenu extends Menu {
     init() {
         this.add(new SellOreButton(this, this.port.sell_ore_price()));
         this.add(new BuyFuelButton(this, this.port.buy_fuel_price()));
-        this.add(new BorrowButton(this));
+        this.add(new LoanButton(this));
         this.add(new EStoreButton(this));
         this.add(new LeavePortButton(this));
         this.set_desc(this.get_desc());
@@ -693,7 +693,7 @@ class PortMenu extends Menu {
         this.set_desc(this.get_desc());
     }
     get_desc() {
-        return "Welcome to "+this.port.name+"!\nYou have $"+this.acct.balance+".";
+        return "Welcome to port "+this.port.name+"!\n";
     }
 }; // class PortMenu
 
@@ -775,12 +775,23 @@ class PortMapButton extends Button {
 }; // class PortMapButton
 
 // --------------------------------------------------------------------
-class LiveStatusButton extends Button {
-    constructor(x, y, w, h) {
-        super(["Status"], [config.color_btn_none], [config.color_btn_none_fg], 
+class BankingButton extends Button {
+    constructor(x, y, w, h, acct) {
+        super([""], [config.color_btn_none], [config.color_btn_none_fg], 
             0, x, y, w, h);
+        this.acct = acct;
     }
-}; // class LiveStatusButton
+    draw(gfx, held) {
+        this.set_title(this.get_status());
+        super.draw(gfx, held);
+    }
+    get_status() {
+        let msg = "Bank: $"+this.acct.balance+".";
+        if (this.loan != null)
+            msg += "\nA loan payment of "+this.loan.payoff.toString()+" is due in "+dur_string(this.loan.due-now())+".";
+        return msg;
+    }
+}; // class BankingButton
 
 // --------------------------------------------------------------------
 class NorthButton extends Button {
@@ -1071,7 +1082,7 @@ class Ports extends TerrObjects {
 class Port {
     constructor(xpos) {
         this.xpos = xpos;
-        this.name = this.random_name(xpos) + " Station";
+        this.name = this.random_name(xpos);
         this.fuel_price = 20 + Math.floor(Math.random() * 80);
         this.ore_price = 200 + Math.floor(Math.random() * 200);
     }
@@ -1082,8 +1093,14 @@ class Port {
         return this.ore_price;
     }
     random_name(xpos) {
-        const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Sigma", "Tau", "Omega"];
-        return names[zmod(Math.floor(xpos/40), names.length)];
+        const names = [
+            "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Sigma", "Tau", "Omega",
+            "Molari", "Sinclair", "Lennier", "Garibladi",
+            "Newton", "Gauss", "Euler", "Riemann", "Hilbert", "Abel", "Fermat", "Neumann",
+            "Noether", "Hamilton", "Jacobi", "Cantor", "Descartes", "Weyl",
+            "Cindy", 
+        ];
+        return names[zmod(nhash(xpos), names.length)];
     }
     draw(gfx, x, y) {
         gfx.draw_circle(x, y, config.port_land_max_dist, config.color_port);
@@ -1165,6 +1182,7 @@ class LiveView extends Drawable {
 class Account {
     constructor(deposit) {
         this.balance = deposit;
+        this.loan = null;
         this.logs = [];
     }
     add_cash(amt, reason) {
@@ -1420,7 +1438,7 @@ class DashClock extends Drawable {
 
 // --------------------------------------------------------------------
 class Dash extends Form {
-    constructor(x, y, w, h, ship, terrain) {
+    constructor(x, y, w, h, ship, acct, terrain) {
         const b   = w * .01;
         const yc = y + h/2;
         const p1w = w * .16;
@@ -1453,7 +1471,7 @@ class Dash extends Form {
         this.add(new FlyingButton(p3x, p3y3, b3w, b3h, ship));
         this.add(new OreMapButton(p3x2, y+b, b3w, b3h, this));
         this.add(new PortMapButton(p3x2, p3y2, b3w, b3h, this));
-        this.add(new LiveStatusButton(p3x2, p3y3, b3w, b3h));
+        this.add(new BankingButton(p3x2, p3y3, b3w, b3h, acct));
         this.add(new NorthButton(p2x + (p2w-dirw)/2, yc-dirh*1.5, dirw, dirh));
         this.add(new SouthButton(p2x + (p2w-dirw)/2, yc+dirh/2, dirw, dirh));
         this.add(new EastButton(p2x + p2w/2 + dirw/2, yc-dirh/2, dirw, dirh));
@@ -1504,7 +1522,7 @@ class Game {
         const shipypos = this.terrain.elevation(shipxpos);
         this.ship = new Ship(0, view_y, cw, view_h, shipxpos, shipypos);
 this.ship.add_fuel(this.ship.max_fuel/3);
-        this.dash = new Dash(0, dash_y, cw, dash_h, this.ship, this.terrain);
+        this.dash = new Dash(0, dash_y, cw, dash_h, this.ship, this.acct, this.terrain);
         this.view = new LiveView(0, view_y, cw, view_h, this.ship, this.terrain, this.ports, this.deposits);
         this.status = null;
         this.message = null;
