@@ -426,34 +426,6 @@ class NoMenuButton extends MenuButton {
 }; // class NoMenuButton
 
 // --------------------------------------------------------------------
-class YesSellOreMenuButton extends MenuButton {
-    constructor(menu, slot) {
-        super(menu, "Yes", slot);
-        this.menu = menu;
-    }
-    click_menu_button(slot) {
-        const cargo = this.menu.ship.unload_ore();
-        this.menu.acct.add_cash(this.menu.price * cargo, "Sale of "+cargo.toString()+" tons ore");
-        _game.pop_form();
-    }
-}; // class YesSellOreMenuButton
-
-// --------------------------------------------------------------------
-class YesBuyFuelMenuButton extends MenuButton {
-    constructor(menu, slot) {
-        super(menu, "Yes", slot);
-        this.menu = menu;
-    }
-    click_menu_button(slot) {
-        const fuel = this.menu.ship.add_fuel(this.menu.fuel);
-        const cost = fuel * this.menu.price;
-        this.menu.acct.remove_cash(cost, "Buy "+fuel.toString()+" liters fuel");
-        _game.set_status("Bought "+fuel.toString()+"L fuel for $"+cost.toString());
-        _game.pop_form();
-    }
-}; // class YesBuyFuelMenuButton
-
-// --------------------------------------------------------------------
 class NumberInputButton extends Button {
     constructor(x, y, w, h, digit, up) {
         super(up ? ["^"] : ["v"], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
@@ -542,6 +514,19 @@ class Menu extends Form {
 }; // class Menu
 
 // --------------------------------------------------------------------
+class YesSellOreMenuButton extends MenuButton {
+    constructor(menu, slot) {
+        super(menu, "Yes", slot);
+        this.menu = menu;
+    }
+    click_menu_button(slot) {
+        const cargo = this.menu.ship.unload_ore();
+        this.menu.acct.add_cash(this.menu.price * cargo, "Sale of "+cargo.toString()+" tons ore");
+        _game.pop_form();
+    }
+}; // class YesSellOreMenuButton
+
+// --------------------------------------------------------------------
 class ConfirmSellOreMenu extends Menu {
     constructor(x, y, w, h, ship, acct, price) {
         super(x, y, w, h, "Do you want to sell the "+ship.cargo.toString()+" tons of cargo in your ship?");
@@ -555,6 +540,35 @@ class ConfirmSellOreMenu extends Menu {
         return this;
     }
 }; // class ConfirmSellOreMenu
+
+// --------------------------------------------------------------------
+class SellOreButton extends MenuButton {
+    constructor(menu, price) {
+        super(menu, "Sell ore at $"+price.toString()+" per ton", 0);
+        this.price = price;
+        this.menurect = { x:menu.x, y:menu.y, w:menu.w, h:menu.h }; 
+    }
+    click_menu_button(slot) {
+        if (_game == null) return;
+        const menu = new ConfirmSellOreMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h, _game.ship, _game.acct, this.price);
+        _game.forms.push(menu.init());
+    }
+}; // class SellOreButton
+
+// --------------------------------------------------------------------
+class YesBuyFuelMenuButton extends MenuButton {
+    constructor(menu, slot) {
+        super(menu, "Yes", slot);
+        this.menu = menu;
+    }
+    click_menu_button(slot) {
+        const fuel = this.menu.ship.add_fuel(this.menu.fuel);
+        const cost = fuel * this.menu.price;
+        this.menu.acct.remove_cash(cost, "Buy "+fuel.toString()+" liters fuel");
+        _game.set_status("Bought "+fuel.toString()+"L fuel for $"+cost.toString());
+        _game.pop_form();
+    }
+}; // class YesBuyFuelMenuButton
 
 // --------------------------------------------------------------------
 class ConfirmBuyFuelMenu extends Menu {
@@ -608,20 +622,6 @@ class BuyFuelMenu extends Menu {
         return this;
     }
 }; // class BuyFuelMenu
-
-// --------------------------------------------------------------------
-class SellOreButton extends MenuButton {
-    constructor(menu, price) {
-        super(menu, "Sell ore at $"+price.toString()+" per ton", 0);
-        this.price = price;
-        this.menurect = { x:menu.x, y:menu.y, w:menu.w, h:menu.h }; 
-    }
-    click_menu_button(slot) {
-        if (_game == null) return;
-        const menu = new ConfirmSellOreMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h, _game.ship, _game.acct, this.price);
-        _game.forms.push(menu.init());
-    }
-}; // class SellOreButton
 
 // --------------------------------------------------------------------
 class BuyFuelButton extends MenuButton {
