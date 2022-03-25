@@ -175,8 +175,14 @@ class Graphics {
         this.ctx.fillText(text, x, y+this.font_height);
     }
     measure_text(text) {
-        const text_size = this.ctx.measureText(text);
-        return { width: text_size.width, height: this.font_height };
+        let max_width = 0;
+        let num_lines = 0;
+        for (let line of text.split("\n")) {
+            const line_size = this.ctx.measureText(line);
+            if (text_size.width > max_width) max_width = text_size.width;
+            ++num_lines;
+        }
+        return { width: text_size.max_width, height: this.font_height * num_lines };
     }
     draw_centered_text(x, y, w, text, color) {
         const text_size = this.measure_text(text);
@@ -248,6 +254,10 @@ class Graphics {
             y += line_h;
         }
         return { w: w, h: lines.length * line_h };
+    }
+    draw_vcentered_paragraph(msg, x, y, w, h, color, list_char = "", center = false) {
+        this.
+        return draw_paragraph(msg, x, y, w, color, list_char, center);
     }
 }; // class Graphics
 
@@ -337,13 +347,14 @@ class AltitudeGauge extends Gauge {
 
 // --------------------------------------------------------------------
 class Button extends Drawable {
-    constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, holdable = false, state_fetcher = null) {
+    constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, holdable = false, state_fetcher = null, title_fetcher = null) {
         super(x, y, w, h);
         this.state_titles = state_titles;
         this.state_colors = state_colors;
         this.state_colors_fg = state_colors_fg;
         this.state = state;
         this.state_fetcher = state_fetcher;
+        this.title_fetcher = title_fetcher;
         this.holdable = holdable;
     }
     set_state(state) {
@@ -365,12 +376,18 @@ class Button extends Drawable {
     draw(gfx, held) {
         if (this.state_fetcher != null)
             this.state = this.state_fetcher.button_state();
+        let title = this.state_titles[this.state];
+        if (this.title_fetcher != null) {
+            let ftitle = this.title_fetcher.get_title();
+            if (ftitle != null) title = ftitle;
+        }
         let bb = config.button_border;
         const color = held ? config.color_menu_btn_held : this.state_colors[this.state];
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, bb, bb, color, config.color_sky);
         //let cy = this.y + this.h/2; // FIXME
         let cy = this.y + (this.h - gfx.font_height) / 2;
-        gfx.draw_centered_text(this.x, cy, this.w, this.state_titles[this.state], this.state_colors_fg[this.state]);
+        ///gfx.draw_centered_text(this.x, cy, this.w, title, this.state_colors_fg[this.state]);
+        gfx.draw_paragraph(title, this.x, cy, this.w, this.state_colors_fg[this.state], "", true);
     }
 }; // class Button
 
@@ -482,6 +499,9 @@ class NumberInput extends Form {
             this.digits.push(digit);
             this.add(digit);
         }
+    }
+    mouse(down, x, y) {
+        return super.mouse(down, x, y);
     }
     get_value() {
         let v = 0;
@@ -638,6 +658,73 @@ class BuyFuelButton extends MenuButton {
 }; // class BuyFuelButton
 
 // --------------------------------------------------------------------
+class YesLoanMenuButton extends MenuButton {
+    constructor(menu, slot) {
+        super(menu, "OK, I agree.", slot);
+        this.menu = menu;
+    }
+    click_menu_button(slot) {
+        this.menu.acct.loan = this.menu.loan;
+        this.menu.acct.add_cash(this.menu.loan.amt);
+        _game.pop_form();
+    }
+}; // class YesLoanMenuButton
+
+// --------------------------------------------------------------------
+class ConfirmLoanMenu extends Menu {
+    constructor(x, y, w, h, acct, amt) {
+        const loan = new Loan(amt);
+        const msg = "We can offer you a loan of $"+amt.toString()+
+            " with the understanding that you will repay $"+loan.payoff.toString()+
+            " within "+dur_string(loan.due-now())+
+            ".\nIf you agree to these terms, please sign here.";
+        super(x, y, w, h, msg);
+        this.acct = acct;
+        this.loan = loan;
+    }
+    init() {
+        this.add(new YesLoanMenuButton(this, 0));
+        this.add(new NoMenuButton(this, "Cancel", 1));
+        return this;
+    }
+}; // class ConfirmLoanMenu
+
+// --------------------------------------------------------------------
+class OkLoanMenuButton extends MenuButton {
+    constructor(menu, slot) {
+        super(menu, "OK", slot);
+        this.menu = menu;
+        this.menurect = { x:menu.x, y:menu.y, w:menu.w, h:menu.h }; 
+    }
+    click_menu_button(slot) {
+        if (_game == null) return;
+        const menu = new ConfirmLoanMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h, 
+            _game.acct, this.menu.loan_input.get_value());
+        _game.pop_form();
+        _game.forms.push(menu.init());
+    }
+}; // class OkLoanMenuButton 
+
+// --------------------------------------------------------------------
+class LoanMenu extends Menu {
+    constructor(x, y, w, h, acct) {
+        super(x, y, w, h, "How much would you like to borrow?");
+        this.acct = acct;
+    }
+    init() {
+        const top = 40;
+        const fih = this.h - this.btn_y - 2*this.btn_h - this.btn_sp - 1.5*this.btn_h;
+        const xmargin = this.w * 0.1;
+        this.loan_input = new NumberInput(this.x+xmargin, this.btn_y, this.w-2*xmargin, fih, 5);
+        this.add(this.loan_input);
+        this.btn_y += fih + .75*this.btn_h;
+        this.add(new OkLoanMenuButton(this, 0));
+        this.add(new NoMenuButton(this, "Cancel", 1));
+        return this;
+    }
+}; // class LoanMenu
+
+// --------------------------------------------------------------------
 class LoanButton extends MenuButton {
     constructor(menu) {
         super(menu, "Borrow money", 2);
@@ -683,7 +770,10 @@ class PortMenu extends Menu {
     init() {
         this.add(new SellOreButton(this, this.port.sell_ore_price()));
         this.add(new BuyFuelButton(this, this.port.buy_fuel_price()));
-        this.add(new LoanButton(this));
+        if (this.acct.loan == null)
+            this.add(new LoanButton(this));
+        else
+            this.add(new RepayButton(this));
         this.add(new EStoreButton(this));
         this.add(new LeavePortButton(this));
         this.set_desc(this.get_desc());
@@ -758,7 +848,7 @@ class OreMapButton extends Button {
 // --------------------------------------------------------------------
 class PortMapButton extends Button {
     constructor(x, y, w, h, dash) {
-        super(["Port map: off", "Port map: on", "Port map: none"],
+        super(["Port map off", "Port map on", "No port map"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
             0, x, y, w, h);
@@ -778,20 +868,31 @@ class PortMapButton extends Button {
 class BankingButton extends Button {
     constructor(x, y, w, h, acct) {
         super([""], [config.color_btn_none], [config.color_btn_none_fg], 
-            0, x, y, w, h);
+            0, x, y, w, h, true, null, new BankingButtonTitleFetcher(acct));
         this.acct = acct;
     }
     draw(gfx, held) {
-        this.set_title(this.get_status());
+        if (this.title_fetcher != null)
+            this.set_title(this.title_fetcher.get_title());
         super.draw(gfx, held);
     }
-    get_status() {
-        let msg = "Bank: $"+this.acct.balance+".";
-        if (this.loan != null)
-            msg += "\nA loan payment of "+this.loan.payoff.toString()+" is due in "+dur_string(this.loan.due-now())+".";
-        return msg;
-    }
+//    get_status() {
+//        let status = "Bank: $"+currency(this.acct.balance)+".";
+//        if (this.acct.loan != null)
+//            status += "\nLoan: $"+currency(this.acct.loan.payoff)+", due in "+dur_string(this.acct.loan.due-now())+".";
+//        return status;
+//    }
 }; // class BankingButton
+
+class BankingButtonTitleFetcher {
+    constructor(acct) { this.acct = acct; }
+    get_title() {
+        let title = "Bank: $"+currency(this.acct.balance)+".";
+        if (this.acct.loan != null)
+            title += "\nLoan: $"+this.acct.loan.payoff+" @"+dur_string(this.acct.loan.due-now());
+        return title;
+    }
+};
 
 // --------------------------------------------------------------------
 class NorthButton extends Button {
@@ -911,8 +1012,9 @@ class PortMap extends ResourceMap {
 
 // --------------------------------------------------------------------
 class LiveStatus extends Drawable {
-    constructor(x, y, w, h) {
+    constructor(x, y, w, h, acct) {
         super(x, y, w, h);
+        this.acct = acct;
         this.message = "Welcome, pilot.\nYour ship is ready for liftoff.";
     }
     set_status(status) {
@@ -1213,7 +1315,7 @@ class Loan {
         this.payoff = amt * (1+this.interest(amt));
     }
     term(amt) {
-        return 100; ///FIXME
+        return 5*60*1000;
     }
     interest(amt) {
         return 0.10; ///FIXME
@@ -1465,7 +1567,7 @@ class Dash extends Form {
         this.fuel_gauge = new FuelGauge(p1x+2*(gw+b), y+b, gw, gh, ship);
         this.ore_map = new OreMap(p4x, y+b, p4w, b3h, w*5);
         this.port_map = new PortMap(p4x, p3y2, p4w, b3h, w*5);
-        this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h);
+        this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h, acct);
         this.add(new ScoopButton(p3x, y+b, b3w, b3h));
         this.add(new LSIButton(p3x, p3y2, b3w, b3h));
         this.add(new FlyingButton(p3x, p3y3, b3w, b3h, ship));
@@ -1641,6 +1743,17 @@ function now() {
     return performance.now();
 }
 
+function dur_string(dur) {
+    dur = Math.floor(dur);
+    const ms  = dur % 1000;  dur = Math.floor(dur/1000);
+    const sec = dur % 60;  dur = Math.floor(dur/60);
+    const min = dur % 60;  dur = Math.floor(dur/60);
+    const hr  = dur % 24;  ///dur = Math.floor(dur/24);
+    let str = (hr == 0) ? min.toString() : hr.toString()+":"+padnum(min,2,10);
+    str += ":"+padnum(sec,2,10);
+    return str;
+}
+
 function run_game() {
     if (_game != null) _game.run();
     window.requestAnimationFrame(run_game);
@@ -1657,11 +1770,14 @@ function el(name) {
     return document.getElementById(name);
 }
 
-function hex2(n) {
-    let hex = Math.floor(n).toString(16);
-    while (hex.length < 2) hex = "0"+hex;
-    return hex;
+function currency(amt) {
+    return amt.toString();
 }
+
+function padnum(num, len, radix) {
+    return Math.floor(num).toString(radix).padStart(len,"0");
+}
+function hex2(num) { return padnum(num, 2, 16); }
 
 function nhash(n) {
     n = n*n;
