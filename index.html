@@ -64,6 +64,7 @@ var config = {
     color_gauge_low        : "a06000",
     color_gauge_text       : "000000",
     color_gauge_title      : "000000",
+    color_debugrid         : "f0f0e0",
     color_msg_bg           : "c0c0c0",
     color_msg_fg           : "000000",
     color_msg_border       : "ff0000",
@@ -178,11 +179,11 @@ class Graphics {
         let max_width = 0;
         let num_lines = 0;
         for (let line of text.split("\n")) {
-            const line_size = this.ctx.measureText(line);
+            const text_size = this.ctx.measureText(line);
             if (text_size.width > max_width) max_width = text_size.width;
             ++num_lines;
         }
-        return { width: text_size.max_width, height: this.font_height * num_lines };
+        return { width: max_width, height: this.font_height * num_lines };
     }
     draw_centered_text(x, y, w, text, color) {
         const text_size = this.measure_text(text);
@@ -232,7 +233,7 @@ class Graphics {
             }
         }
     }
-    draw_paragraph(msg, x, y, w, color, list_char = "", center = false) {
+    draw_paragraph(msg, x, y, w, color, center = false, list_char = "") {
         const lines = this.split_text(msg, w);
         const line_h = this.measure_text("M").height;
         const list_indent = (list_char.length == 0) ? 0 : this.measure_text(list_char).width;
@@ -255,9 +256,10 @@ class Graphics {
         }
         return { w: w, h: lines.length * line_h };
     }
-    draw_vcentered_paragraph(msg, x, y, w, h, color, list_char = "", center = false) {
-        this.
-        return draw_paragraph(msg, x, y, w, color, list_char, center);
+    draw_vcentered_paragraph(msg, x, y, w, h, color, center = false, list_char = "") {
+        const msg_size = this.measure_text(msg);
+        y += (h - msg_size.height) / 2;
+        return this.draw_paragraph(msg, x, y, w, color, center, list_char);
     }
 }; // class Graphics
 
@@ -384,10 +386,7 @@ class Button extends Drawable {
         let bb = config.button_border;
         const color = held ? config.color_menu_btn_held : this.state_colors[this.state];
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, bb, bb, color, config.color_sky);
-        //let cy = this.y + this.h/2; // FIXME
-        let cy = this.y + (this.h - gfx.font_height) / 2;
-        ///gfx.draw_centered_text(this.x, cy, this.w, title, this.state_colors_fg[this.state]);
-        gfx.draw_paragraph(title, this.x, cy, this.w, this.state_colors_fg[this.state], "", true);
+        gfx.draw_vcentered_paragraph(title, this.x, this.y, this.w, this.h, this.state_colors_fg[this.state], true);
     }
 }; // class Button
 
@@ -524,7 +523,7 @@ class Menu extends Form {
         this.btn_h = Math.floor(this.h * 0.10);
         this.btn_sp = Math.floor(this.btn_h * .3);
         this.btn_x = this.x + (this.w - this.btn_w) / 2;
-        this.btn_y = this.y + this.btn_h*1.75;
+        this.btn_y = this.y + this.btn_h*3.5;
     }
     draw(gfx) {
         super.draw(gfx);
@@ -549,7 +548,7 @@ class YesSellOreMenuButton extends MenuButton {
 // --------------------------------------------------------------------
 class ConfirmSellOreMenu extends Menu {
     constructor(x, y, w, h, ship, acct, price) {
-        super(x, y, w, h, "Do you want to sell the "+ship.cargo.toString()+" tons of cargo in your ship?");
+        super(x, y, w, h, "Do you want to sell the "+ship.cargo.toString()+" tons of cargo in your ship for $"+currency(ship.cargo*price)+"?");
         this.ship = ship;
         this.acct = acct;
         this.price = price;
@@ -674,10 +673,10 @@ class YesLoanMenuButton extends MenuButton {
 class ConfirmLoanMenu extends Menu {
     constructor(x, y, w, h, acct, amt) {
         const loan = new Loan(amt);
-        const msg = "We can offer you a loan of $"+amt.toString()+
-            " with the understanding that you will repay $"+loan.payoff.toString()+
+        const msg = "We can offer you a loan of $"+currency(amt)+
+            " with the understanding that you will repay $"+currency(loan.payoff)+
             " within "+dur_string(loan.due-now())+
-            ".\nIf you agree to these terms, please sign here.";
+            " minutes.\nIf you agree to these terms, please sign here.";
         super(x, y, w, h, msg);
         this.acct = acct;
         this.loan = loan;
@@ -889,7 +888,7 @@ class BankingButtonTitleFetcher {
     get_title() {
         let title = "Bank: $"+currency(this.acct.balance)+".";
         if (this.acct.loan != null)
-            title += "\nLoan: $"+this.acct.loan.payoff+" @"+dur_string(this.acct.loan.due-now());
+            title += "\nDue: $"+this.acct.loan.payoff+" in "+dur_string(this.acct.loan.due-now());
         return title;
     }
 };
@@ -1303,7 +1302,7 @@ class Account {
     }
     log(amt, reason) {
         const time = now();
-        this.logs.push(time.toString()+" "+this.balance.toString()+" + "+amt.toString()+" "+reason);
+        this.logs.push(time.toString()+" "+currency(this.balance)+" + "+currency(amt)+" "+reason);
     }
 }; // class Account
 
@@ -1312,7 +1311,7 @@ class Loan {
     constructor(amt) {
         this.amt = amt;
         this.due = now() + this.term(amt);
-        this.payoff = amt * (1+this.interest(amt));
+        this.payoff = Math.floor(amt * (1+this.interest(amt)));
     }
     term(amt) {
         return 5*60*1000;
@@ -1629,6 +1628,7 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.status = null;
         this.message = null;
         this.forms = [ this.dash ];
+        this.debugrid = false;
 this.dash.ore_map.install(this.ship, this.deposits);
 this.dash.port_map.install(this.ship, this.ports);
     }
@@ -1687,12 +1687,13 @@ this.dash.port_map.install(this.ship, this.ports);
             this.forms[i].draw(this.gfx);
         }
         this.draw_message();
+        if (this.debugrid) this.draw_debugrid(this.gfx);
     }
     static _event_keydown(e) {
-        if (_game != null) _game.event_keystroke(e.code, true);
+        if (_game != null) _game.event_keystroke(e.key, true);
     }
     static _event_keyup(e) {
-        if (_game != null) _game.event_keystroke(e.code, false);
+        if (_game != null) _game.event_keystroke(e.key, false);
     }
     static _event_mousedown(e) {
         if (_game != null) _game.event_mouse(true, e.offsetX, e.offsetY);
@@ -1700,28 +1701,28 @@ this.dash.port_map.install(this.ship, this.ports);
     static _event_mouseup(e) {
         if (_game != null) _game.event_mouse(false, e.offsetX, e.offsetY);
     }
-    event_keystroke(code, down) {
-        this.set_thrust(code, down);
+    event_keystroke(key, down) {
+        switch (key) {
+        case 'ArrowDown':
+            this.ship.set_bot_thrust(down);
+            break;
+        case 'ArrowUp':
+            this.ship.set_bot_thrust(down, down);
+            break;
+        case 'ArrowRight':
+            this.ship.set_side_thrust(false, down);
+            break;
+        case 'ArrowLeft':
+            this.ship.set_side_thrust(true, down);
+            break;
+        case 'G':
+            if (down) this.debugrid = !this.debugrid;
+            break;
+        }
     }
     event_mouse(down, x, y) {
         if (this.forms.length == 0) return;
         this.forms[this.forms.length-1].mouse(down, x, y);
-    }
-    set_thrust(code, on) {
-        switch (code) {
-        case 'ArrowDown':
-            this.ship.set_bot_thrust(on);
-            break;
-        case 'ArrowUp':
-            this.ship.set_bot_thrust(on, on);
-            break;
-        case 'ArrowRight':
-            this.ship.set_side_thrust(false, on);
-            break;
-        case 'ArrowLeft':
-            this.ship.set_side_thrust(true, on);
-            break;
-        }
     }
     game_over(msg) {
         this.message = "Game over: "+msg;
@@ -1734,6 +1735,25 @@ this.dash.port_map.install(this.ship, this.ports);
         this.gfx.draw_outlined_rect(this.msgrect.x, this.msgrect.y, this.msgrect.w, this.msgrect.h, b, b, config.color_msg_bg, config.color_msg_border);
         const y = this.msgrect.y + (this.msgrect.h - this.gfx.font_height) / 2;
         this.gfx.draw_centered_text(this.msgrect.x, y, this.msgrect.w, this.message, config.color_msg_fg);
+    }
+    draw_debugrid(gfx) {
+        const canvas = gfx.ctx.canvas;
+        const step = 100;
+        const minor = 10;
+        const major = 500;
+        const gw = 8;
+        for (let x = 0; x < canvas.width; x += step) {
+            const thick = (x % major) ? 1 : 3;
+            gfx.draw_rect(x-thick/2, 0, thick, canvas.height, config.color_debugrid);
+        }
+        for (let y = 0; y < canvas.height; y += step) {
+            const thick = (y % major) ? 1 : 3;
+            gfx.draw_rect(0,y-thick/2,canvas.width,thick, config.color_debugrid);
+        }
+        for (let x = 0; x < canvas.width; x += minor)
+            gfx.draw_rect(x,(canvas.height-gw)/2,1,gw, config.color_debugrid);
+        for (let y = 0; y < canvas.height; y += minor)
+            gfx.draw_rect((canvas.width-gw)/2,y,gw,1, config.color_debugrid);
     }
 }; // class Game
 
@@ -1771,7 +1791,15 @@ function el(name) {
 }
 
 function currency(amt) {
-    return amt.toString();
+    let r = "";
+    let sep = 3;
+    let a = amt.toString();
+    let i = a.length-sep;
+    for (; i > 0; i -= sep) {
+        r = "," + a.substr(i,sep) + r;
+    }
+    r = a.substr(0,sep+i) + r;
+    return r;
 }
 
 function padnum(num, len, radix) {
