@@ -471,6 +471,9 @@ class NumberInputDigit extends Drawable {
         this.digit_char_w = w;
         this.value = 0;
     }
+    set_value(d) {
+        this.value = d;
+    }
     mouse(down, x, y) {
         for (const btn of [this.up_btn, this.down_btn]) {
             if (btn.inside(x, y)) {
@@ -489,10 +492,11 @@ class NumberInputDigit extends Drawable {
 
 // --------------------------------------------------------------------
 class NumberInput extends Form {
-    constructor(x, y, w, h, num_digits) {
+    constructor(x, y, w, h, num_digits, max) {
         super(x, y, w, h, config.color_number_input_bg);
         const digit_w = w / num_digits;
         this.digits = [];
+        this.max = max;
         for (let i = 0; i < num_digits; ++i) {
             const digit = new NumberInputDigit(x+w-digit_w*(i+1), y, digit_w, h);
             this.digits.push(digit);
@@ -500,13 +504,25 @@ class NumberInput extends Form {
         }
     }
     mouse(down, x, y) {
-        return super.mouse(down, x, y);
+        const r = super.mouse(down, x, y);
+        if (r) {
+            if (this.get_value() > this.max)
+                this.set_value(this.max);
+        }
+        return r;
     }
     get_value() {
         let v = 0;
         for (let i = this.digits.length-1; i >= 0; --i)
             v = (10 * v) + this.digits[i].value;
         return v;
+    }
+    set_value(v) {
+        v = Math.floor(v);
+        for (let i = 0; i < this.digits.length; ++i) {
+            this.digits[i].set_value(v % 10);
+            v = Math.floor(v/10);
+        }
     }
 }; // class NumberInput
 
@@ -633,7 +649,7 @@ class BuyFuelMenu extends Menu {
         const top = 40;
         const fih = this.h - this.btn_y - 2*this.btn_h - this.btn_sp - 1.5*this.btn_h;
         const xmargin = this.w * 0.1;
-        this.fuel_input = new NumberInput(this.x+xmargin, this.btn_y, this.w-2*xmargin, fih, 4);
+        this.fuel_input = new NumberInput(this.x+xmargin, this.btn_y, this.w-2*xmargin, fih, 4, Math.min(this.ship.max_fuel-this.ship.fuel, this.acct.balance/this.price));
         this.add(this.fuel_input);
         this.btn_y += fih + .75*this.btn_h;
         this.add(new OkBuyFuelMenuButton(this, 0));
