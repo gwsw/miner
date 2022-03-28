@@ -290,6 +290,23 @@ class Drawable {
 }; // class Drawable
 
 // --------------------------------------------------------------------
+class TextBox extends Drawable {
+    constructor(x, y, w, h, text, bg, fg) {
+        super(x, y, w, h);
+        this.text = text;
+        this.bg = bg;
+        this.fg = fg;
+    }
+    set_text(text) {
+        this.text = text;
+    }
+    draw(gfx) {
+        if (this.bg != null) gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
+        if (this.fg != null) gfx.draw_paragraph(this.text, this.x, this.y, this.w, this.fg);
+    }
+}; // class TextBox
+
+// --------------------------------------------------------------------
 class Gauge extends Drawable {
     constructor(x, y, w, h, title, color, max_value, low_value = -1, crit_value = -1, fetcher = null) {
         super(x, y, w, h);
@@ -551,11 +568,13 @@ class NumberInput extends Form {
 class Menu extends Form {
     constructor(x, y, w, h, desc) {
         super(x, y, w, h, config.color_menu_bg);
+        this.desc_box = new TextBox(x, y, w, h, desc, null, config.color_menu_fg);
         this.set_desc(desc);
     }
     set_desc(desc) {
+        this.desc_box.set_text(desc);
         this.desc = desc;
-        //FIXME
+        ///FIXME
         this.btn_w = Math.floor(this.w * 0.6);
         this.btn_h = Math.floor(this.h * 0.10);
         this.btn_sp = Math.floor(this.btn_h * .3);
@@ -564,7 +583,7 @@ class Menu extends Form {
     }
     draw(gfx) {
         super.draw(gfx);
-        gfx.draw_paragraph(this.desc, this.x +20, this.y + this.btn_h*.5, this.w, config.color_menu_hdr_fg);
+        this.desc_box.draw(gfx);
         gfx.draw_outline(this.x, this.y, this.w, this.h, config.menu_border, config.menu_border, config.color_menu_border);
     }
 }; // class Menu
