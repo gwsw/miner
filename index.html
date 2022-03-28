@@ -370,10 +370,14 @@ class Button extends Drawable {
     }
     mouse(down, x, y) {
         if (this.holdable && this.inside(x, y)) {
-            this.click(down);
+            if (down) this.click_down(); else this.click_up();
             return true;
         }
         return false;
+    }
+    click_down() {
+    }
+    click_up() {
     }
     draw(gfx, held) {
         if (this.state_fetcher != null)
@@ -425,8 +429,7 @@ class MenuButton extends Button {
             0, menu.btn_x, menu.btn_y + slot * (menu.btn_h + menu.btn_sp), menu.btn_w, menu.btn_h, true);
         this.slot = slot;
     }
-    click(down) {
-        if (!down) return;
+    click_down() {
         this.click_menu_button(this.slot);
     }
 }; // class MenuButton
@@ -449,8 +452,7 @@ class NumberInputButton extends Button {
         this.digit = digit;
         this.incr = up ? +1 : -1;
     }
-    click(down) {
-        if (!down) return;
+    click_down() {
         this.digit.value += this.incr;
         if (this.digit.value < 0)
             this.digit.value = 0;
@@ -477,7 +479,7 @@ class NumberInputDigit extends Drawable {
     mouse(down, x, y) {
         for (const btn of [this.up_btn, this.down_btn]) {
             if (btn.inside(x, y)) {
-                btn.click(down);
+                if (down) btn.click_down(); else btn.click_up();
                 return true;
             }
         }
@@ -811,8 +813,7 @@ class ScoopButton extends Button {
             2, x, y, w, h);
         this.holdable = (this.state != 2);
     }
-    click(down) {
-        if (!down) return;
+    click_down() {
     }
 }; // class ScoopButton
 
@@ -825,8 +826,7 @@ class LSIButton extends Button {
             0, x, y, w, h);
         this.holdable = true;
     }
-    click(down) {
-        if (!down) return;
+    click_down() {
         this.set_state((this.state == 0) ? 1 : 0);
     }
 }; // class LSIButton
@@ -851,8 +851,7 @@ class OreMapButton extends Button {
         this.holdable = (this.state != 2);
         this.dash = dash;
     }
-    click(down) {
-        if (!down) return;
+    click_down() {
         if (this.dash.ore_map == null) return;
         const active = !this.dash.ore_map.active;
         this.dash.ore_map.active = active;
@@ -870,8 +869,7 @@ class PortMapButton extends Button {
         this.holdable = (this.state != 2);
         this.dash = dash;
     }
-    click(down) {
-        if (!down) return;
+    click_down() {
         if (this.dash.port_map == null) return;
         const active = !this.dash.port_map.active;
         this.dash.port_map.active = active;
@@ -916,7 +914,7 @@ class NorthButton extends Button {
             0, x, y, w, h);
         this.holdable = true;
     }
-    click(down) {
+    click_down() {
         if (_game != null) _game.event_keystroke("ArrowUp", down);
     }
 }; // class NorthButton
@@ -928,7 +926,7 @@ class SouthButton extends Button {
             0, x, y, w, h);
         this.holdable = true;
     }
-    click(down) {
+    click_down() {
         if (_game != null) _game.event_keystroke("ArrowDown", down);
     }
 }; // class SouthButton
@@ -940,7 +938,7 @@ class EastButton extends Button {
             0, x, y, w, h);
         this.holdable = true;
     }
-    click(down) {
+    click_down() {
         if (_game != null) _game.event_keystroke("ArrowRight", down);
     }
 }; // class EastButton
@@ -952,7 +950,7 @@ class WestButton extends Button {
             0, x, y, w, h);
         this.holdable = true;
     }
-    click(down) {
+    click_down() {
         if (_game != null) _game.event_keystroke("ArrowLeft", down);
     }
 }; // class WestButton
