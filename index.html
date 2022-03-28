@@ -13,6 +13,11 @@
 // Globals
 var _game = null;
 
+//#define UP_ARROW    "\u25b2"
+//#define DOWN_ARROW  "\u25bc"
+//#define RIGHT_ARROW "\u25b6"
+//#define LEFT_ARROW  "\u25c0"
+
 var config = {
     button_border          : 3,
     crash_vel2             : .04,
@@ -32,6 +37,7 @@ var config = {
     menu_border            : 4,
     menu_yfrac             : .75,
     min_elev               : 10,
+    numin_btn_border       : 1,
     ore_mass_max           : 60,
     ore_mass_min           : 8,
     ore_sep                : 120,
@@ -45,6 +51,8 @@ var config = {
     terr_base              : 24, // pixels
     terr_step              : 22, // pixels
 
+    color_bank_bg          : "007000",
+    color_bank_fg          : "ffffff",
     color_btn_active       : "10ff40",
     color_btn_active_fg    : "000000",
     color_btn_dir          : "1050c0",
@@ -56,8 +64,8 @@ var config = {
     color_clock_bg         : "e0e0e0",
     color_clock_border     : "000000",
     color_clock_fg         : "000000",
-    color_dash_bg          : "669ae4",
-    color_fuel             : "10d040",
+    color_dash_bg          : "bec2cb",
+    color_fuel             : "40a0f0",
     color_gauge_bg         : "e0e0e0",
     color_gauge_border     : "a098b0",
     color_gauge_crit       : "ff1010",
@@ -75,7 +83,9 @@ var config = {
     color_menu_btn_fg      : "ffffff",
     color_menu_btn_held    : "ffff00",
     color_menu_hdr_fg      : "000000",
-    color_number_input_bg  : "00ffff",
+    color_numin_bg         : "00ffff",
+    color_numin_btn_bg     : "c0c0c0",
+    color_numin_btn_fg     : "000000",
     color_ore              : "d4af37",
     color_port             : "f0f0f0",
     color_resmap_bg        : "a8a818",
@@ -235,7 +245,7 @@ class Graphics {
     }
     draw_paragraph(msg, x, y, w, color, center = false, list_char = "") {
         const lines = this.split_text(msg, w);
-        const line_h = this.measure_text("M").height;
+        const line_h = this.font_height;
         const list_indent = (list_char.length == 0) ? 0 : this.measure_text(list_char).width;
         for (let i = 0; i < lines.length; ++i) {
             let line = lines[i];
@@ -273,6 +283,9 @@ class Drawable {
         this.y = y;
         this.w = w;
         this.h = h;
+    }
+    draw(gfx) {
+        return 
     }
 }; // class Drawable
 
@@ -349,15 +362,16 @@ class AltitudeGauge extends Gauge {
 
 // --------------------------------------------------------------------
 class Button extends Drawable {
-    constructor(state_titles, state_colors, state_colors_fg, state, x, y, w, h, holdable = false, state_fetcher = null, title_fetcher = null) {
+    constructor(x, y, w, h, border, state_titles, state_colors_bg, state_colors_fg, state, holdable = false, state_fetcher = null, title_fetcher = null) {
         super(x, y, w, h);
         this.state_titles = state_titles;
-        this.state_colors = state_colors;
+        this.state_colors_bg = state_colors_bg;
         this.state_colors_fg = state_colors_fg;
         this.state = state;
         this.state_fetcher = state_fetcher;
         this.title_fetcher = title_fetcher;
         this.holdable = holdable;
+        this.border = (border >= 0) ? border : config.button_border;
     }
     set_state(state) {
         this.state = state;
@@ -387,9 +401,8 @@ class Button extends Drawable {
             let ftitle = this.title_fetcher.get_title();
             if (ftitle != null) title = ftitle;
         }
-        let bb = config.button_border;
-        const color = held ? config.color_menu_btn_held : this.state_colors[this.state];
-        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, bb, bb, color, config.color_sky);
+        const color = held ? config.color_menu_btn_held : this.state_colors_bg[this.state];
+        gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, this.border, this.border, color, config.color_sky);
         gfx.draw_vcentered_paragraph(title, this.x, this.y, this.w, this.h, this.state_colors_fg[this.state], true);
     }
 }; // class Button
@@ -425,8 +438,8 @@ class Form extends Drawable {
 // --------------------------------------------------------------------
 class MenuButton extends Button {
     constructor(menu, title, slot) {
-        super([title], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
-            0, menu.btn_x, menu.btn_y + slot * (menu.btn_h + menu.btn_sp), menu.btn_w, menu.btn_h, true);
+        super(menu.btn_x, menu.btn_y + slot * (menu.btn_h + menu.btn_sp), menu.btn_w, menu.btn_h, config.button_border,
+            [title], [config.color_menu_btn_bg], [config.color_menu_btn_fg], 0, true);
         this.slot = slot;
     }
     click_down() {
@@ -446,11 +459,11 @@ class NoMenuButton extends MenuButton {
 
 // --------------------------------------------------------------------
 class NumberInputButton extends Button {
-    constructor(x, y, w, h, digit, up) {
-        super(up ? ["^"] : ["v"], [config.color_menu_btn_bg], [config.color_menu_btn_fg],
-            0, x, y, w, h);
+    constructor(x, y, w, h, digit, incr) {
+        super(x, y, w, h, config.numin_btn_border,
+            (incr > 0) ? ["\u25b2"] : ["\u25bc"], [config.color_numin_btn_bg], [config.color_numin_btn_fg], 0, true);
         this.digit = digit;
-        this.incr = up ? +1 : -1;
+        this.incr = incr;
     }
     click_down() {
         this.digit.value += this.incr;
@@ -466,11 +479,12 @@ class NumberInputDigit extends Drawable {
     constructor(x, y, w, h, i) {
         super(x, y, w, h);
         const btn_h = Math.floor(h/3);
-        this.up_btn = new NumberInputButton(x, y, w, btn_h, this, true);
-        this.down_btn = new NumberInputButton(x, y+h-btn_h, w, btn_h, this, false);
+        this.up_btn = new NumberInputButton(x, y, w, btn_h, this, +1);
+        this.down_btn = new NumberInputButton(x, y+h-btn_h, w, btn_h, this, -1);
         this.digit_char_x = x;
         this.digit_char_y = y + btn_h;
         this.digit_char_w = w;
+        this.digit_char_h = btn_h;
         this.value = 0;
     }
     set_value(d) {
@@ -488,19 +502,24 @@ class NumberInputDigit extends Drawable {
     draw(gfx) {
         this.up_btn.draw(gfx, false);
         this.down_btn.draw(gfx, false);
-        gfx.draw_centered_text(this.digit_char_x, this.digit_char_y, this.digit_char_w, this.value.toString(), config.color_btn_dir);
+        gfx.draw_vcentered_paragraph(this.value.toString(), 
+            this.digit_char_x, this.digit_char_y, this.digit_char_w, this.digit_char_h,
+            config.color_btn_dir, true);
     }
 }; // class NumberInputButton
 
 // --------------------------------------------------------------------
 class NumberInput extends Form {
     constructor(x, y, w, h, num_digits, max) {
-        super(x, y, w, h, config.color_number_input_bg);
-        const digit_w = w / num_digits;
+        super(x, y, w, h, config.color_numin_bg);
+        const digit_sp = 0.2;
+        const digit_w = w / (num_digits + digit_sp * (num_digits-1));
         this.digits = [];
         this.max = max;
+        let dx = x + w - digit_w;
         for (let i = 0; i < num_digits; ++i) {
-            const digit = new NumberInputDigit(x+w-digit_w*(i+1), y, digit_w, h);
+            const digit = new NumberInputDigit(dx, y, digit_w, h);
+            dx -= digit_w * (1+digit_sp);
             this.digits.push(digit);
             this.add(digit);
         }
@@ -649,11 +668,14 @@ class BuyFuelMenu extends Menu {
     }
     init() {
         const top = 40;
-        const fih = this.h - this.btn_y - 2*this.btn_h - this.btn_sp - 1.5*this.btn_h;
-        const xmargin = this.w * 0.1;
-        this.fuel_input = new NumberInput(this.x+xmargin, this.btn_y, this.w-2*xmargin, fih, 4, Math.min(this.ship.max_fuel-this.ship.fuel, this.acct.balance/this.price));
+        const digits = 4;
+        const digitw = this.w * 0.03;
+        const fi_w = digits * digitw;
+        const fi_h = fi_w;
+        const fi_x = this.x + (this.w - fi_w) /2
+        this.fuel_input = new NumberInput(fi_x, this.btn_y, fi_w, fi_h, 4, Math.min(this.ship.max_fuel-this.ship.fuel, this.acct.balance/this.price));
         this.add(this.fuel_input);
-        this.btn_y += fih + .75*this.btn_h;
+        this.btn_y += fi_h + .75*this.btn_h;
         this.add(new OkBuyFuelMenuButton(this, 0));
         this.add(new NoMenuButton(this, "Cancel", 1));
         return this;
@@ -807,10 +829,11 @@ class PortMenu extends Menu {
 // --------------------------------------------------------------------
 class ScoopButton extends Button {
     constructor(x, y, w, h) {
-        super(["Ore scoop: off", "Ore scoop: on", "Ore scoop: none"],
+        super(x, y, w, h, config.button_border,
+            ["Ore scoop: off", "Ore scoop: on", "Ore scoop: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
-            2, x, y, w, h);
+            2, false);
         this.holdable = (this.state != 2);
     }
     click_down() {
@@ -820,11 +843,10 @@ class ScoopButton extends Button {
 // --------------------------------------------------------------------
 class LSIButton extends Button {
     constructor(x, y, w, h) {
-        super(["LSI: off", "LSI: on"],
+        super(x, y, w, h, config.button_border,
+            ["LSI: off", "LSI: on"],
             [config.color_btn_inactive, config.color_btn_active],
-            [config.color_btn_inactive_fg, config.color_btn_active_fg],
-            0, x, y, w, h);
-        this.holdable = true;
+            [config.color_btn_inactive_fg, config.color_btn_active_fg], 0, true);
     }
     click_down() {
         this.set_state((this.state == 0) ? 1 : 0);
@@ -834,21 +856,22 @@ class LSIButton extends Button {
 // --------------------------------------------------------------------
 class FlyingButton extends Button {
     constructor(x, y, w, h, ship) {
-        super(["On ground", "Flying"],
+        super(x, y, w, h, config.button_border,
+            ["On ground", "Flying"],
             [config.color_btn_inactive, config.color_btn_active],
             [config.color_btn_inactive_fg, config.color_btn_active_fg],
-            0, x, y, w, h, false, new ShipFlyingStateFetcher(ship));
+            0, false, new ShipFlyingStateFetcher(ship));
     }
 }; // class LSIButton
 
 // --------------------------------------------------------------------
 class OreMapButton extends Button {
     constructor(x, y, w, h, dash) {
-        super(["Ore detector: off", "Ore detector: on", "Ore detector: none"],
+        super(x, y, w, h, config.button_border,
+            ["Ore detector: off", "Ore detector: on", "Ore detector: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
-            0, x, y, w, h);
-        this.holdable = (this.state != 2);
+            0, true);
         this.dash = dash;
     }
     click_down() {
@@ -862,11 +885,10 @@ class OreMapButton extends Button {
 // --------------------------------------------------------------------
 class PortMapButton extends Button {
     constructor(x, y, w, h, dash) {
-        super(["Port map off", "Port map on", "No port map"],
+        super(x, y, w, h, config.button_border,
+            ["Port map off", "Port map on", "No port map"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
-            [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
-            0, x, y, w, h);
-        this.holdable = (this.state != 2);
+            [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg], 0, true);
         this.dash = dash;
     }
     click_down() {
@@ -880,8 +902,9 @@ class PortMapButton extends Button {
 // --------------------------------------------------------------------
 class BankingButton extends Button {
     constructor(x, y, w, h, acct) {
-        super([""], [config.color_btn_none], [config.color_btn_none_fg], 
-            0, x, y, w, h, true, null, new BankingButtonTitleFetcher(acct));
+        super(x, y, w, h, config.button_border,
+            [""], [config.color_bank_bg], [config.color_bank_fg], 
+            0, true, null, new BankingButtonTitleFetcher(acct));
         this.acct = acct;
     }
     draw(gfx, held) {
@@ -889,12 +912,6 @@ class BankingButton extends Button {
             this.set_title(this.title_fetcher.get_title());
         super.draw(gfx, held);
     }
-//    get_status() {
-//        let status = "Bank: $"+currency(this.acct.balance)+".";
-//        if (this.acct.loan != null)
-//            status += "\nLoan: $"+currency(this.acct.loan.payoff)+", due in "+dur_string(this.acct.loan.due-now())+".";
-//        return status;
-//    }
 }; // class BankingButton
 
 class BankingButtonTitleFetcher {
@@ -908,50 +925,51 @@ class BankingButtonTitleFetcher {
 };
 
 // --------------------------------------------------------------------
-class NorthButton extends Button {
-    constructor(x, y, w, h) {
-        super(["\u25b2"], [config.color_btn_dir], [config.color_btn_dir_fg],
-            0, x, y, w, h);
-        this.holdable = true;
+class DirButton extends Button {
+    constructor(x, y, w, h, border, title, bg, fg, keyname) {
+        super(x, y, w, h, border, [title], [bg], [fg], 0, true);
+        this.keyname = keyname;
     }
-    click_down() {
-        if (_game != null) _game.event_keystroke("ArrowUp", down);
+    click(down) {
+        if (_game != null) _game.event_keystroke(this.keyname, down);
+    }
+    click_down() { this.click(true); }
+    click_up() { this.click(false); }
+}; // class DirButton
+
+// --------------------------------------------------------------------
+class NorthButton extends DirButton {
+    constructor(x, y, w, h) {
+        super(x, y, w, h, config.button_border,
+            "\u25b2", config.color_btn_dir, config.color_btn_dir_fg,
+            "ArrowUp");
     }
 }; // class NorthButton
 
 // --------------------------------------------------------------------
-class SouthButton extends Button {
+class SouthButton extends DirButton {
     constructor(x, y, w, h) {
-        super(["\u25bc"], [config.color_btn_dir], [config.color_btn_dir_fg],
-            0, x, y, w, h);
-        this.holdable = true;
-    }
-    click_down() {
-        if (_game != null) _game.event_keystroke("ArrowDown", down);
+        super(x, y, w, h, config.button_border,
+            "\u25bc", config.color_btn_dir, config.color_btn_dir_fg, 
+            "ArrowDown");
     }
 }; // class SouthButton
 
 // --------------------------------------------------------------------
-class EastButton extends Button {
+class EastButton extends DirButton {
     constructor(x, y, w, h) {
-        super(["\u25b6"], [config.color_btn_dir], [config.color_btn_dir_fg],
-            0, x, y, w, h);
-        this.holdable = true;
-    }
-    click_down() {
-        if (_game != null) _game.event_keystroke("ArrowRight", down);
+        super(x, y, w, h, config.button_border,
+            "\u25b6", config.color_btn_dir, config.color_btn_dir_fg,
+            "ArrowRight");
     }
 }; // class EastButton
 
 // --------------------------------------------------------------------
-class WestButton extends Button {
+class WestButton extends DirButton {
     constructor(x, y, w, h) {
-        super(["\u25c0"], [config.color_btn_dir], [config.color_btn_dir_fg],
-            0, x, y, w, h);
-        this.holdable = true;
-    }
-    click_down() {
-        if (_game != null) _game.event_keystroke("ArrowLeft", down);
+        super(x, y, w, h, config.button_border,
+            "\u25c0", config.color_btn_dir, config.color_btn_dir_fg,
+            "ArrowLeft");
     }
 }; // class WestButton
 
