@@ -285,9 +285,71 @@ class Drawable {
         this.h = h;
     }
     draw(gfx) {
-        return 
+        return { w:this.w, h:this.h };
     }
 }; // class Drawable
+
+// --------------------------------------------------------------------
+class Layout extends Drawable {
+    constructor(x, y, w, h, rows, cols, col_width) {
+        //assert(col_width.length == cols);
+        super(x, y, w, h);
+        this.col_width = col_width;
+        this.row_sp = 4; /// FIXME
+        this.col_sp = 4; /// FIXME
+        this.items = [];
+        for (let row = 0; row < rows; ++row) {
+            this.items.push([]);
+            for (let col = 0; col < cols; ++col) {
+                this.items[row].push(null);
+            }
+        }
+        this.needs_layout = true;
+    }
+    add(row, col, drawable, rowspan = 1, colspan = 1) {
+        this.items[row][col] = { item:drawable, rowspan:rowspan, colspan:colspan };
+    }
+    draw(gfx) {
+        if (this.needs_layout) {
+            this.draw_with_layout(gfx);
+            this.needs_layout = false;
+        } else {
+            this.draw_without_layout(gfx);
+        }
+    }
+    draw_with_layout(gfx) {
+        let y = this.y;
+        let max_w = 0;
+        for (let row = 0; row < this.rows; ++row) {
+            let row_h = 2.5 * gfx.font_height; /// FIXME
+            let x = this.x;
+            for (let col = 0; col < this.cols; ++col) {
+                const col_w = this.col_width[col];
+                const item = this.items[row][col];
+                if (item != null) {
+                    item.move(x, y, col_w, row_h); // !!!
+                    const drawn = item.draw(gfx);
+                    /// ?????
+                    if (drawn == null)
+                        drawn = { w:col_w, h:row_h };
+                    if (drawn.h > row_h)
+                        row_h = drawn.h;
+                }
+                x += col_w + this.col_sp;
+                if (col_w > max_w) max_w = col_w;
+            }
+            y += row_h + this.row_sp;
+        }
+        return { w:max_w, h:y-this.y };
+    }
+    draw_without_layout(gfx) {
+        for (let row = 0; row < this.rows; ++row) {
+            for (let col = 0; col < this.cols; ++col) {
+                this.itmes[row][col].draw(gfx);
+            }
+        }
+    }
+}; // class Layout
 
 // --------------------------------------------------------------------
 class TextBox extends Drawable {
@@ -303,6 +365,7 @@ class TextBox extends Drawable {
     draw(gfx) {
         if (this.bg != null) gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
         if (this.fg != null) gfx.draw_paragraph(this.text, this.x, this.y, this.w, this.fg);
+        return null;
     }
 }; // class TextBox
 
@@ -353,6 +416,7 @@ class Gauge extends Drawable {
         }
         if (ctext != null)
             gfx.draw_centered_text(this.x, this.y+this.h/2-value_text_size.height/2, this.w, ctext, ccolor);
+        return null;
     }
 }; // class Gauge
 
@@ -410,7 +474,7 @@ class Button extends Drawable {
     }
     click_up() {
     }
-    draw(gfx, held) {
+    draw(gfx) {
         if (this.state_fetcher != null)
             this.state = this.state_fetcher.button_state();
         let title = this.state_titles[this.state];
@@ -418,9 +482,11 @@ class Button extends Drawable {
             let ftitle = this.title_fetcher.get_title();
             if (ftitle != null) title = ftitle;
         }
+const held = false; /// FIXME
         const color = held ? config.color_menu_btn_held : this.state_colors_bg[this.state];
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, this.border, this.border, color, config.color_sky);
         gfx.draw_vcentered_paragraph(title, this.x, this.y, this.w, this.h, this.state_colors_fg[this.state], true);
+        return null;
     }
 }; // class Button
 
@@ -447,8 +513,10 @@ class Form extends Drawable {
     draw(gfx) {
         gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
         for (const btn of this.children) {
-            btn.draw(gfx, btn == this.held_btn);
+            ///if (btn == this.held_btn) @@@;
+            btn.draw(gfx);
         }
+        return null;
     }
 }; // class Form
 
@@ -522,6 +590,7 @@ class NumberInputDigit extends Drawable {
         gfx.draw_vcentered_paragraph(this.value.toString(), 
             this.digit_char_x, this.digit_char_y, this.digit_char_w, this.digit_char_h,
             config.color_btn_dir, true);
+        return null;
     }
 }; // class NumberInputButton
 
@@ -585,6 +654,7 @@ class Menu extends Form {
         super.draw(gfx);
         this.desc_box.draw(gfx);
         gfx.draw_outline(this.x, this.y, this.w, this.h, config.menu_border, config.menu_border, config.color_menu_border);
+        return null;
     }
 }; // class Menu
 
@@ -926,10 +996,11 @@ class BankingButton extends Button {
             0, true, null, new BankingButtonTitleFetcher(acct));
         this.acct = acct;
     }
-    draw(gfx, held) {
+    draw(gfx) {
         if (this.title_fetcher != null)
             this.set_title(this.title_fetcher.get_title());
-        super.draw(gfx, held);
+        super.draw(gfx);
+        return null;
     }
 }; // class BankingButton
 
@@ -1025,6 +1096,7 @@ class ResourceMap extends Drawable {
             gfx2.draw_outline((this.w-rw)/2, this.h*(1-fh)/2, rw, this.h*fh, 1, 1, config.color_sky);
         }
         gfx.ctx.drawImage(canvas2, this.x, this.y);
+        return null;
     }
 }; // class ResourceMap
 
@@ -1076,6 +1148,7 @@ class LiveStatus extends Drawable {
         gfx.draw_paragraph(this.message,
             this.x + xindent, this.y + config.gauge_border,
             this.w - 2*xindent, config.color_status_fg);
+        return null;
     }
 }; // class LiveStatus
 
