@@ -12,6 +12,7 @@
 // --------------------------------------------------------------------
 // Globals
 var _game = null;
+var _held = null;
 
 //#define UP_ARROW    "\u25b2"
 //#define DOWN_ARROW  "\u25bc"
@@ -291,12 +292,12 @@ class Drawable {
 
 // --------------------------------------------------------------------
 class Layout extends Drawable {
-    constructor(x, y, w, h, rows, cols, col_width) {
+    constructor(x, y, w, h, rows, cols, col_width, row_sp=4, col_sp=4) {
         //assert(col_width.length == cols);
         super(x, y, w, h);
         this.col_width = col_width;
-        this.row_sp = 4; /// FIXME
-        this.col_sp = 4; /// FIXME
+        this.row_sp = row_sp;
+        this.col_sp = col_sp;
         this.items = [];
         for (let row = 0; row < rows; ++row) {
             this.items.push([]);
@@ -307,7 +308,7 @@ class Layout extends Drawable {
         this.needs_layout = true;
     }
     add(row, col, drawable, rowspan = 1, colspan = 1) {
-        this.items[row][col] = { item:drawable, rowspan:rowspan, colspan:colspan };
+        this.items[row][col] = { dr:drawable, rowspan:rowspan, colspan:colspan };
     }
     draw(gfx) {
         if (this.needs_layout) {
@@ -327,8 +328,10 @@ class Layout extends Drawable {
                 const col_w = this.col_width[col];
                 const item = this.items[row][col];
                 if (item != null) {
-                    item.move(x, y, col_w, row_h); // !!!
-                    const drawn = item.draw(gfx);
+                    const iw = (col_w * dr.colspan) + (dr.colspan-1) * this.col_sp;
+                    const ih = (row_h * dr.rowspan) + (dr.rowspan-1) * this.row_sp;
+                    item.dr.move(x, y, iw, ih); // !!!
+                    const drawn = item.dr.draw(gfx);
                     /// ?????
                     if (drawn == null)
                         drawn = { w:col_w, h:row_h };
@@ -464,11 +467,15 @@ class Button extends Drawable {
         return x >= this.x && x < this.x + this.w && y >= this.y && y < this.y + this.h;
     }
     mouse(down, x, y) {
-        if (this.holdable && this.inside(x, y)) {
-            if (down) this.click_down(); else this.click_up();
-            return true;
+        if (!this.holdable || !this.inside(x, y))
+            return false;
+        if (down) {
+            _held = this;
+            this.click_down();
+        } else {
+            this.click_up();
         }
-        return false;
+        return true;
     }
     click_down() {
     }
@@ -482,8 +489,7 @@ class Button extends Drawable {
             let ftitle = this.title_fetcher.get_title();
             if (ftitle != null) title = ftitle;
         }
-const held = false; /// FIXME
-        const color = held ? config.color_menu_btn_held : this.state_colors_bg[this.state];
+        const color = (this == _held) ? config.color_menu_btn_held : this.state_colors_bg[this.state];
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, this.border, this.border, color, config.color_sky);
         gfx.draw_vcentered_paragraph(title, this.x, this.y, this.w, this.h, this.state_colors_fg[this.state], true);
         return null;
@@ -496,7 +502,6 @@ class Form extends Drawable {
         super(x, y, w, h);
         this.bg = bg;
         this.children = [];
-        this.held_btn = null;
     }
     add(child) {
         this.children.push(child);
@@ -512,10 +517,8 @@ class Form extends Drawable {
     }
     draw(gfx) {
         gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
-        for (const btn of this.children) {
-            ///if (btn == this.held_btn) @@@;
+        for (const btn of this.children)
             btn.draw(gfx);
-        }
         return null;
     }
 }; // class Form
@@ -1062,6 +1065,20 @@ class WestButton extends DirButton {
             "ArrowLeft");
     }
 }; // class WestButton
+
+// --------------------------------------------------------------------
+class DirPad extends Form {
+    constructor(x, y, w, h) {
+        super(x, y, w, h, config.color_dash_bg);
+        const yc = y + h/2;
+        const dirw = w * 0.25;
+        const dirh = dirw;
+        this.add(new NorthButton(x + (w-dirw)/2,     yc-dirh*1.5, dirw, dirh));
+        this.add(new SouthButton(x + (w-dirw)/2,     yc+dirh/2,   dirw, dirh));
+        this.add(new EastButton (x + w/2 + dirw/2,   yc-dirh/2,   dirw, dirh));
+        this.add(new WestButton (x + w/2 - dirw*1.5, yc-dirh/2,   dirw, dirh));
+    }
+}; // class DirPad
 
 // --------------------------------------------------------------------
 class ResourceMap extends Drawable {
@@ -1697,10 +1714,7 @@ class Dash extends Form {
         this.add(new OreMapButton(p3x2, y+b, b3w, b3h, this));
         this.add(new PortMapButton(p3x2, p3y2, b3w, b3h, this));
         this.add(new BankingButton(p3x2, p3y3, b3w, b3h, acct));
-        this.add(new NorthButton(p2x + (p2w-dirw)/2, yc-dirh*1.5, dirw, dirh));
-        this.add(new SouthButton(p2x + (p2w-dirw)/2, yc+dirh/2, dirw, dirh));
-        this.add(new EastButton(p2x + p2w/2 + dirw/2, yc-dirh/2, dirw, dirh));
-        this.add(new WestButton(p2x + p2w/2 - dirw*1.5, yc-dirh/2, dirw, dirh));
+        this.add(new DirPad(p2x, y, p2w, h));
         this.add(new DashClock(p2x, p2yc, p2w, y+h-b-p2yc));
     }
     set_status(status) {
@@ -1845,6 +1859,7 @@ this.dash.port_map.install(this.ship, this.ports);
         }
     }
     event_mouse(down, x, y) {
+        if (!down) _held = null;
         if (this.forms.length == 0) return;
         this.forms[this.forms.length-1].mouse(down, x, y);
     }
