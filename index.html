@@ -285,17 +285,20 @@ class Drawable {
         this.w = w;
         this.h = h;
     }
-    draw(gfx) {
-        return { w:this.w, h:this.h };
-    }
+    ///draw(gfx) {
+    ///    return { w:this.w, h:this.h };
+    ///}
 }; // class Drawable
 
 // --------------------------------------------------------------------
 class Layout extends Drawable {
-    constructor(x, y, w, h, rows, cols, col_width, row_sp=4, col_sp=4) {
-        //assert(col_width.length == cols);
+    constructor(x, y, w, h, rows, row_height, cols, col_width, row_sp=4, col_sp=4) {
+        if (row_height.length != rows || col_width.length != cols) return null;
         super(x, y, w, h);
+        this.rows = rows;
+        this.cols = cols;
         this.col_width = col_width;
+        this.row_height = row_height;
         this.row_sp = row_sp;
         this.col_sp = col_sp;
         this.items = [];
@@ -310,33 +313,54 @@ class Layout extends Drawable {
     add(row, col, drawable, rowspan = 1, colspan = 1) {
         this.items[row][col] = { dr:drawable, rowspan:rowspan, colspan:colspan };
     }
+    drawable(row, col) {
+        const item = this.items[row][col];
+        if (item == null) return null;
+        return item.dr;
+    }
     draw(gfx) {
         if (this.needs_layout) {
+            //this.needs_layout = false;
             this.draw_with_layout(gfx);
-            this.needs_layout = false;
         } else {
             this.draw_without_layout(gfx);
         }
+        return null;
     }
     draw_with_layout(gfx) {
-        let y = this.y;
+        let y = this.y + this.row_sp;
         let max_w = 0;
         for (let row = 0; row < this.rows; ++row) {
-            let row_h = 2.5 * gfx.font_height; /// FIXME
-            let x = this.x;
+            let row_h = this.row_height[row];
+            //if (row_h < 0) row_h = this.h - y - this.row_sp;
+            let x = this.x + this.col_sp;
             for (let col = 0; col < this.cols; ++col) {
-                const col_w = this.col_width[col];
+                let col_w = this.col_width[col];
+                if (col_w < 0) col_w = this.w - x - this.col_sp;
                 const item = this.items[row][col];
                 if (item != null) {
-                    const iw = (col_w * dr.colspan) + (dr.colspan-1) * this.col_sp;
-                    const ih = (row_h * dr.rowspan) + (dr.rowspan-1) * this.row_sp;
-                    item.dr.move(x, y, iw, ih); // !!!
-                    const drawn = item.dr.draw(gfx);
-                    /// ?????
+                    let draw_x = x;
+                    let draw_y = y;
+                    let iw = col_w;
+                    for (let i = 1; i < item.colspan; ++i) {
+                        const cw = this.col_sp + this.col_width[col-i];
+                        iw += cw;
+                        draw_x -= cw;
+                    }
+                    let ih = row_h;
+                    for (let i = 1; i < item.rowspan; ++i) {
+                        const rh = this.row_sp + this.row_height[row-i];
+                        ih += rh;
+                        draw_y -= rh;
+                    }
+                    item.dr.move(draw_x, draw_y, iw, ih); // !!!
+                    let drawn = item.dr.draw(gfx);
+if(false){
                     if (drawn == null)
-                        drawn = { w:col_w, h:row_h };
+                        drawn = { w:iw, h:ih };
                     if (drawn.h > row_h)
                         row_h = drawn.h;
+}
                 }
                 x += col_w + this.col_sp;
                 if (col_w > max_w) max_w = col_w;
@@ -346,9 +370,12 @@ class Layout extends Drawable {
         return { w:max_w, h:y-this.y };
     }
     draw_without_layout(gfx) {
+//return null;
         for (let row = 0; row < this.rows; ++row) {
             for (let col = 0; col < this.cols; ++col) {
-                this.itmes[row][col].draw(gfx);
+                const item = this.items[row][col];
+                if (item != null)
+                    item.dr.draw(gfx);
             }
         }
     }
@@ -958,35 +985,35 @@ class FlyingButton extends Button {
 
 // --------------------------------------------------------------------
 class OreMapButton extends Button {
-    constructor(x, y, w, h, dash) {
+    constructor(x, y, w, h, ore_map) {
         super(x, y, w, h, config.button_border,
             ["Ore detector: off", "Ore detector: on", "Ore detector: none"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg],
             0, true);
-        this.dash = dash;
+        this.ore_map = ore_map;
     }
     click_down() {
-        if (this.dash.ore_map == null) return;
-        const active = !this.dash.ore_map.active;
-        this.dash.ore_map.active = active;
+        if (this.ore_map == null) return;
+        const active = !this.ore_map.active;
+        this.ore_map.active = active;
         this.set_state(active ? 1 : 0);
     }
 }; // class OreMapButton
 
 // --------------------------------------------------------------------
 class PortMapButton extends Button {
-    constructor(x, y, w, h, dash) {
+    constructor(x, y, w, h, port_map) {
         super(x, y, w, h, config.button_border,
             ["Port map off", "Port map on", "No port map"],
             [config.color_btn_inactive, config.color_btn_active, config.color_btn_none],
             [config.color_btn_inactive_fg, config.color_btn_active_fg, config.color_btn_none_fg], 0, true);
-        this.dash = dash;
+        this.port_map = port_map;
     }
     click_down() {
-        if (this.dash.port_map == null) return;
-        const active = !this.dash.port_map.active;
-        this.dash.port_map.active = active;
+        if (this.port_map == null) return;
+        const active = !this.port_map.active;
+        this.port_map.active = active;
         this.set_state(active ? 1 : 0);
     }
 }; // class PortMapButton
@@ -1070,13 +1097,20 @@ class WestButton extends DirButton {
 class DirPad extends Form {
     constructor(x, y, w, h) {
         super(x, y, w, h, config.color_dash_bg);
-        const yc = y + h/2;
-        const dirw = w * 0.25;
-        const dirh = dirw;
-        this.add(new NorthButton(x + (w-dirw)/2,     yc-dirh*1.5, dirw, dirh));
-        this.add(new SouthButton(x + (w-dirw)/2,     yc+dirh/2,   dirw, dirh));
-        this.add(new EastButton (x + w/2 + dirw/2,   yc-dirh/2,   dirw, dirh));
-        this.add(new WestButton (x + w/2 - dirw*1.5, yc-dirh/2,   dirw, dirh));
+        this.empty = true;
+    }
+    move(x, y, w, h) {
+        super.move(x, y, w, h);
+        if (this.empty && w > 0 && h > 0) { ///FIXME
+            const yc = y + h/2;
+            const dirw = w * 0.25;
+            const dirh = dirw;
+            this.add(new NorthButton(x + (w-dirw)/2,     yc-dirh*1.5, dirw, dirh));
+            this.add(new SouthButton(x + (w-dirw)/2,     yc+dirh/2,   dirw, dirh));
+            this.add(new EastButton (x + w/2 + dirw/2,   yc-dirh/2,   dirw, dirh));
+            this.add(new WestButton (x + w/2 - dirw*1.5, yc-dirh/2,   dirw, dirh));
+            this.empty = false;
+        }
     }
 }; // class DirPad
 
@@ -1160,6 +1194,7 @@ class LiveStatus extends Drawable {
         this.message = status;
     }
     draw(gfx) {
+        if (this.w == 0 || this.h == 0) return;
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, config.gauge_border, config.gauge_border, config.color_status_bg, config.color_sky); 
         const xindent = config.gauge_border + 4;
         gfx.draw_paragraph(this.message,
@@ -1681,54 +1716,82 @@ class DashClock extends Drawable {
 // --------------------------------------------------------------------
 class Dash extends Form {
     constructor(x, y, w, h, ship, acct, terrain) {
-        const b   = w * .01;
-        const yc = y + h/2;
-        const p1w = w * .16;
-        const p2w = w * .12;
-        const p3w = w * .30;
-        const p4w = w - (p1w + p2w + p3w + 5*b);
-        const p1x = x + b;
-        const p2x = p1x + p1w + b;
-        const p3x = p2x + p2w + b;
-        const p4x = p3x + p3w + b;
-        const gw = Math.floor((p1w-2*b)/ 3);
-        const gh = h - 2*b;
-        const dirw = p2w * 0.25;
-        const dirh = dirw;
-        const b3w = (p3w-b) / 2;
-        const b3h = Math.floor((h-4*b) / 3);
-        const p2yc = yc + dirh*2;
-        const p3x2 = p3x + b3w + b;
-        const p3y2 = y+b+b3h+b;
-        const p3y3 = p3y2+b3h+b;
         super(x, y, w, h, config.color_dash_bg);
-        this.alt_gauge = new AltitudeGauge(p1x, y+b, gw, gh, ship, terrain);
-        this.ore_gauge = new OreGauge(p1x+gw+b, y+b, gw, gh, ship);
-        this.fuel_gauge = new FuelGauge(p1x+2*(gw+b), y+b, gw, gh, ship);
-        this.ore_map = new OreMap(p4x, y+b, p4w, b3h, w*5);
-        this.port_map = new PortMap(p4x, p3y2, p4w, b3h, w*5);
-        this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h, acct);
-        this.add(new ScoopButton(p3x, y+b, b3w, b3h));
-        this.add(new LSIButton(p3x, p3y2, b3w, b3h));
-        this.add(new FlyingButton(p3x, p3y3, b3w, b3h, ship));
-        this.add(new OreMapButton(p3x2, y+b, b3w, b3h, this));
-        this.add(new PortMapButton(p3x2, p3y2, b3w, b3h, this));
-        this.add(new BankingButton(p3x2, p3y3, b3w, b3h, acct));
-        this.add(new DirPad(p2x, y, p2w, h));
-        this.add(new DashClock(p2x, p2yc, p2w, y+h-b-p2yc));
+        const row_sp = h*.05;
+        const col_sp = w*.01;
+        const row_h = h - 2*row_sp;
+        const btn_h = (row_h - 2*row_sp) / 3;
+        const layout = new Layout(x, y, w, h,
+            3, [btn_h, btn_h, btn_h],
+            7, [w*.05, w*.05, w*.05, w*.12, w*.15, w*.15, -1],
+            row_sp, col_sp);
+        this.layout = layout;
+        layout.add(2, 0, new AltitudeGauge(0,0,0,0, ship, terrain), 3);
+        layout.add(2, 1, new OreGauge(0,0,0,0, ship), 3);
+        layout.add(2, 2, new FuelGauge(0,0,0,0, ship), 3);
+        layout.add(1, 3, new DirPad(0,0,0,0), 2);
+        layout.add(2, 3, new DashClock(0,0,0,0));
+        layout.add(0, 4, new ScoopButton(0,0,0,0)); 
+        layout.add(1, 4, new LSIButton(0,0,0,0));
+        layout.add(2, 4, new FlyingButton(0,0,0,0, ship));
+        layout.add(0, 5, new OreMapButton(0,0,0,0, this.ore_map));
+        layout.add(1, 5, new PortMapButton(0,0,0,0, this.port_map));
+        layout.add(2, 5, new BankingButton(0,0,0,0, acct));
+        layout.add(0, 6, new OreMap(0,0,0,0));
+        layout.add(1, 6, new PortMap(0,0,0,0));
+        //layout.add(2, 6, new LiveStatus(0,0,0,0, acct));
+layout.drawable(0,6).install(this.ship, this.deposits); // OreMap
+layout.drawable(1,6).install(this.ship, this.ports); // PortMap
+        
+//        const b   = w * .01;
+//        const yc = y + h/2;
+//        const p1w = w * .16;
+//        const p2w = w * .12;
+//        const p3w = w * .30;
+//        const p4w = w - (p1w + p2w + p3w + 5*b);
+//        const p1x = x + b;
+//        const p2x = p1x + p1w + b;
+//        const p3x = p2x + p2w + b;
+//        const p4x = p3x + p3w + b;
+//        const gw = Math.floor((p1w-2*b)/ 3);
+//        const gh = h - 2*b;
+//        const dirw = p2w * 0.25;
+//        const dirh = dirw;
+//        const b3w = (p3w-b) / 2;
+//        const b3h = Math.floor((h-4*b) / 3);
+//        const p2yc = yc + dirh*2;
+//        const p3x2 = p3x + b3w + b;
+//        const p3y2 = y+b+b3h+b;
+//        const p3y3 = p3y2+b3h+b;
+//        super(x, y, w, h, config.color_dash_bg);
+//        this.alt_gauge = new AltitudeGauge(p1x, y+b, gw, gh, ship, terrain);
+//        this.ore_gauge = new OreGauge(p1x+gw+b, y+b, gw, gh, ship);
+//        this.fuel_gauge = new FuelGauge(p1x+2*(gw+b), y+b, gw, gh, ship);
+//        this.ore_map = new OreMap(p4x, y+b, p4w, b3h, w*5);
+//        this.port_map = new PortMap(p4x, p3y2, p4w, b3h, w*5);
+//        this.live_status = new LiveStatus(p4x, p3y3, p4w, b3h, acct);
+//        this.add(new ScoopButton(p3x, y+b, b3w, b3h));
+//        this.add(new LSIButton(p3x, p3y2, b3w, b3h));
+//        this.add(new FlyingButton(p3x, p3y3, b3w, b3h, ship));
+//        this.add(new OreMapButton(p3x2, y+b, b3w, b3h, this));
+//        this.add(new PortMapButton(p3x2, p3y2, b3w, b3h, this));
+//        this.add(new BankingButton(p3x2, p3y3, b3w, b3h, acct));
+//        this.add(new DirPad(p2x, y, p2w, h));
+//        this.add(new DashClock(p2x, p2yc, p2w, y+h-b-p2yc));
     }
     set_status(status) {
-        this.live_status.set_status(status);
+        ///this.live_status.set_status(status);
     }
     draw(gfx) {
         super.draw(gfx);
         gfx.draw_rect(this.x, this.y, this.w, this.h*.015, config.color_sky);
-        this.alt_gauge.draw(gfx);
-        this.ore_gauge.draw(gfx);
-        this.fuel_gauge.draw(gfx);
-        this.ore_map.draw(gfx);
-        this.port_map.draw(gfx);
-        this.live_status.draw(gfx);
+        this.layout.draw(gfx);
+        ///this.alt_gauge.draw(gfx);
+        ///this.ore_gauge.draw(gfx);
+        ///this.fuel_gauge.draw(gfx);
+        ///this.ore_map.draw(gfx);
+        ///this.port_map.draw(gfx);
+        ///this.live_status.draw(gfx);
     }
 }; // class Dash
 
@@ -1767,8 +1830,6 @@ this.ship.add_fuel(this.ship.max_fuel/3);
         this.message = null;
         this.forms = [ this.dash ];
         this.debugrid = false;
-this.dash.ore_map.install(this.ship, this.deposits);
-this.dash.port_map.install(this.ship, this.ports);
     }
     exit_port() {
         this.ship.exit_port();
