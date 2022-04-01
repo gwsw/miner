@@ -248,7 +248,7 @@ class Graphics {
             }
         }
     }
-    draw_paragraph(msg, x, y, w, color, center = false, list_char = "") {
+    draw_paragraph(msg, x, y, w, color, center = false, list_char = "", dryrun = false) {
         const lines = this.split_text(msg, w);
         const line_h = this.font_height;
         const list_indent = (list_char.length == 0) ? 0 : this.measure_text(list_char).width;
@@ -266,7 +266,7 @@ class Graphics {
             }
             if (list_char.length > 0 && line.substr(0,list_char.length) != list_char)
                 tx += list_indent;
-            this.draw_text(tx, y, line, color);
+            if (!dryrun) this.draw_text(tx, y, line, color);
             y += line_h;
         }
         return { w: w, h: lines.length * line_h };
@@ -343,7 +343,7 @@ class Layout extends Drawable {
         let max_w = 0;
         for (let row = 0; row < this.rows; ++row) {
             let row_h = this.row_height[row];
-            //if (row_h < 0) row_h = this.h - y - this.row_sp;
+            if (row_h < 0) row_h = this.h - y - this.row_sp;
             let x = this.x + this.col_sp;
             for (let col = 0; col < this.cols; ++col) {
                 let col_w = this.col_width[col];
@@ -364,9 +364,9 @@ class Layout extends Drawable {
                         ih += rh;
                         draw_y -= rh;
                     }
-                    item.dr.move(draw_x, draw_y, iw, ih); // !!!
+                    item.dr.move(draw_x, draw_y, iw, ih); // Layout moves the item!!!
                     const size = item.dr.measure(gfx);
-                    if (draw_y + ih > y + row_h)
+                    if (draw_y + size.h > y + row_h)
                         row_h = draw_y + ih - y;
                 }
                 x += col_w + this.col_sp;
@@ -387,6 +387,9 @@ class TextBox extends Drawable {
     }
     set_text(text) {
         this.text = text;
+    }
+    measure(gfx) {
+        return gfx.draw_paragraph(gfx, this.x, this.y, this.w, new Color("000000"), false, "", true);
     }
     draw(gfx) {
         if (this.bg != null) gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
