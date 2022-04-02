@@ -292,10 +292,10 @@ class Drawable {
     mouse(down, x, y) {
         return false;
     }
-    draw(gfx) {
-    }
     measure(gfx) {
         return { w:this.w, h:this.h };
+    }
+    draw(gfx) {
     }
 }; // class Drawable
 
@@ -343,7 +343,7 @@ class Layout extends Drawable {
         let max_w = 0;
         for (let row = 0; row < this.rows; ++row) {
             let row_h = this.row_height[row];
-            if (row_h < 0) row_h = this.h - y - this.row_sp;
+            ///if (row_h < 0) row_h = this.h - y - this.row_sp;
             let x = this.x + this.col_sp;
             for (let col = 0; col < this.cols; ++col) {
                 let col_w = this.col_width[col];
@@ -364,7 +364,8 @@ class Layout extends Drawable {
                         ih += rh;
                         draw_y -= rh;
                     }
-                    item.dr.move(draw_x, draw_y, iw, ih); // Layout moves the item!!!
+                    if (do_move)
+                        item.dr.move(draw_x, draw_y, iw, ih); // Layout moves the item!!!
                     const size = item.dr.measure(gfx);
                     if (draw_y + size.h > y + row_h)
                         row_h = draw_y + ih - y;
@@ -373,6 +374,7 @@ class Layout extends Drawable {
                 if (col_w > max_w) max_w = col_w;
             }
             y += row_h + this.row_sp;
+            this.row_height[row] = row_h;
         }
     }
 }; // class Layout
@@ -480,6 +482,8 @@ class Button extends Drawable {
         this.title_fetcher = title_fetcher;
         this.holdable = holdable;
         this.border = (border >= 0) ? border : config.button_border;
+        this.xmargin = 8; ///FIXME
+        this.ymargin = 6;
     }
     set_state(state) {
         this.state = state;
@@ -504,6 +508,12 @@ class Button extends Drawable {
     click_down() {
     }
     click_up() {
+    }
+    measure(gfx) {
+        const text_size = gfx.draw_paragraph(title, this.x, this.y, this.w, new Color("000000"), true, "", true);
+        text_size.w += 2 * this.xmargin;
+        text_size.h += 2 * this.ymargin;
+        return text_size;
     }
     draw(gfx) {
         if (this.state_fetcher != null)
