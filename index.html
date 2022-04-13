@@ -364,11 +364,10 @@ class Layout extends Drawable {
                         ih += rh;
                         draw_y -= rh;
                     }
-                    if (do_move)
-                        item.dr.move(draw_x, draw_y, iw, ih); // Layout moves the item!!!
+                    item.dr.move(draw_x, draw_y, iw, ih); // !!!
                     const size = item.dr.measure(gfx);
                     if (draw_y + size.h > y + row_h)
-                        row_h = draw_y + ih - y;
+                        row_h = draw_y + size.h - y;
                 }
                 x += col_w + this.col_sp;
                 if (col_w > max_w) max_w = col_w;
@@ -488,6 +487,9 @@ class Button extends Drawable {
     set_state(state) {
         this.state = state;
     }
+    get_title() {
+        return this.state_titles[this.state];
+    }
     set_title(title) {
         this.state_titles[this.state] = title;
     }
@@ -510,7 +512,7 @@ class Button extends Drawable {
     click_up() {
     }
     measure(gfx) {
-        const text_size = gfx.draw_paragraph(title, this.x, this.y, this.w, new Color("000000"), true, "", true);
+        const text_size = gfx.draw_paragraph(this.get_title(), this.x, this.y, this.w, new Color("000000"), true, "", true);
         text_size.w += 2 * this.xmargin;
         text_size.h += 2 * this.ymargin;
         return text_size;
@@ -518,7 +520,7 @@ class Button extends Drawable {
     draw(gfx) {
         if (this.state_fetcher != null)
             this.state = this.state_fetcher.button_state();
-        let title = this.state_titles[this.state];
+        let title = this.get_title();
         if (this.title_fetcher != null) {
             let ftitle = this.title_fetcher.get_title();
             if (ftitle != null) title = ftitle;
