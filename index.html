@@ -312,15 +312,19 @@ class Layout extends Drawable {
         this.row_sp = row_sp;
         this.col_sp = col_sp;
         this.items = [];
-        for (let row = 0; row < rows; ++row) {
-            this.items.push([]);
-            for (let col = 0; col < cols; ++col) {
-                this.items[row].push(null);
-            }
-        }
+        this.expand(rows, cols);
         this.needs_layout = true;
     }
+    expand(rows, cols) {
+        for (let row = 0; row < rows; ++row) {
+            if (row >= this.items.length)
+                this.items.push([]);
+            for (let col = this.items[row].length; col < cols; ++col)
+                this.items[row].push(null);
+        }
+    }
     add(row, col, drawable, rowspan = 1, colspan = 1) {
+        this.expand(row+1, col+1);
         this.items[row][col] = { dr:drawable, rowspan:rowspan, colspan:colspan };
     }
     mouse(down, x, y) {
@@ -676,6 +680,7 @@ class NumberInput extends Form {
 class Menu extends Form {
     constructor(x, y, w, h, desc) {
         super(x, y, w, h, config.color_menu_bg);
+        ///this.layout = new Layout(x, y, w, h, this, 0, [], 1, w, h*.01, 0);
         this.desc_box = new TextBox(x, y, w, h, desc, null, config.color_menu_fg);
         this.set_desc(desc);
     }
