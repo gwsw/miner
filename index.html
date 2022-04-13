@@ -1377,7 +1377,7 @@ class Ports extends TerrObjects {
 class Port {
     constructor(xpos) {
         this.xpos = xpos;
-        this.name = this.random_name(xpos);
+        this.name = Port.random_name(xpos);
         this.fuel_price = 20 + Math.floor(Math.random() * 80);
         this.ore_price = 200 + Math.floor(Math.random() * 200);
     }
@@ -1387,7 +1387,7 @@ class Port {
     sell_ore_price() {
         return this.ore_price;
     }
-    random_name(xpos) {
+    static random_name(xpos) {
         const names = [
             "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Sigma", "Tau", "Omega",
             "Molari", "Sinclair", "Lennier", "Garibladi",
@@ -1612,10 +1612,10 @@ class Ship extends MassiveObject {
     }
     enter_port(port) {
         this.inport = port;
-        this.status_msg("In port "+port.name+".");
+        this.status_msg("You are in port "+port.name+".");
     }
     exit_port() {
-        this.status_msg("Left port "+this.inport.name+".");
+        this.status_msg("You have left port "+this.inport.name+".");
         this.inport = null;
     }
     prospect(deposits) {
