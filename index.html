@@ -342,6 +342,8 @@ class Layout extends Drawable {
         let y = this.y + this.row_sp;
         let max_w = 0;
         for (let row = 0; row < this.rows; ++row) {
+            while (row >= this.row_height.length)
+                this.row_height.push(0);
             let row_h = this.row_height[row];
             ///if (row_h < 0) row_h = this.h - y - this.row_sp;
             let x = this.x + this.col_sp;
@@ -390,7 +392,7 @@ class TextBox extends Drawable {
         this.text = text;
     }
     measure(gfx) {
-        return gfx.draw_paragraph(gfx, this.x, this.y, this.w, new Color("000000"), false, "", true);
+        return gfx.draw_paragraph(msg, this.x, this.y, this.w, new Color("000000"), false, "", true);
     }
     draw(gfx) {
         if (this.bg != null) gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
@@ -1193,18 +1195,30 @@ class LiveStatus extends Drawable {
     constructor(x, y, w, h, acct) {
         super(x, y, w, h);
         this.acct = acct;
-        this.message = "Welcome, pilot.\nYour ship is ready for liftoff.";
+        this.messages = [];
+        ///this.max_messages = 3;
+        this.status_msg("Welcome, pilot.\nYour ship is ready for liftoff.");
     }
     status_msg(status) {
-        this.message = status;
+        this.messages.push(status);
+        ///while (this.messages.length > this.max_messages) this.messages.unshift();
+    }
+    clear() {
+        this.messages.splice(0);
     }
     draw(gfx) {
         if (this.w == 0 || this.h == 0) return;
         gfx.draw_outlined_rect(this.x, this.y, this.w, this.h, config.gauge_border, config.gauge_border, config.color_status_bg, config.color_sky); 
         const xindent = config.gauge_border + 4;
-        gfx.draw_paragraph(this.message,
-            this.x + xindent, this.y + config.gauge_border,
-            this.w - 2*xindent, config.color_status_fg);
+        let y = this.y + this.h - config.gauge_border; // bottom
+        let w = this.w - 2*config.gauge_border;
+        for (let i = this.messages.length; i > 0; --i) {
+            const msg = this.messages[i-1];
+            const size = gfx.draw_paragraph(msg, 0, 0, w, config.color_status_fg, false, "", true);
+            y -= size.h;
+            if (y < this.y) break;
+            gfx.draw_paragraph(msg, this.x + xindent, y, w, config.color_status_fg);
+        }
     }
 }; // class LiveStatus
 
@@ -1748,6 +1762,11 @@ class Dash extends Form {
     status_msg(status) {
         this.live_status.status_msg(status);
     }
+    begin_cmd() {
+        ///this.live_status.clear();
+    }
+    end_cmd() {
+    }
     draw(gfx) {
         if (this.need_layout) {
             this.layout.layout(gfx);
@@ -1872,7 +1891,14 @@ this.dash.port_map.install(this.ship, this.ports); // PortMap
     static _event_mouseup(e) {
         if (_game != null) _game.event_mouse(false, e.offsetX, e.offsetY);
     }
+    begin_cmd() {
+        this.dash.begin_cmd();
+    }
+    end_cmd() {
+        this.dash.end_cmd();
+    }
     event_keystroke(key, down) {
+        if (down) this.begin_cmd();
         switch (key) {
         case 'ArrowDown':
             this.ship.set_bot_thrust(down);
@@ -1890,11 +1916,14 @@ this.dash.port_map.install(this.ship, this.ports); // PortMap
             if (down) this.debugrid = !this.debugrid;
             break;
         }
+        this.end_cmd();
     }
     event_mouse(down, x, y) {
         if (!down) _held = null;
+        if (down) this.begin_cmd();
         if (this.forms.length == 0) return;
         this.forms[this.forms.length-1].mouse(down, x, y);
+        this.end_cmd();
     }
     game_over(msg) {
         this.message = "Game over: "+msg;
