@@ -746,7 +746,7 @@ class YesBuyFuelMenuButton extends MenuButton {
         const fuel = this.menu.ship.add_fuel(this.menu.fuel);
         const cost = fuel * this.menu.price;
         this.menu.acct.remove_cash(cost, "Buy "+fuel.toString()+" liters fuel");
-        _game.set_status("Bought "+fuel.toString()+"L fuel for $"+cost.toString());
+        _game.status_msg("Bought "+fuel.toString()+"L fuel for $"+cost.toString());
         _game.pop_form();
     }
 }; // class YesBuyFuelMenuButton
@@ -920,7 +920,7 @@ class LeavePortButton extends MenuButton {
         if (_game == null) return;
         _game.exit_port();
         _game.pop_form();
-        _game.set_status("Ready for liftoff.");
+        _game.status_msg("Ready for liftoff.");
     }
 }; // class LeavePortButton
 
@@ -1028,7 +1028,7 @@ class PortMapButton extends Button {
 class BankingButton extends Button {
     constructor(x, y, w, h, acct) {
         super(x, y, w, h, config.button_border,
-            [""], [config.color_bank_bg], [config.color_bank_fg], 
+            ["Bank"], [config.color_bank_bg], [config.color_bank_fg], 
             0, true, null, new BankingButtonTitleFetcher(acct));
         this.acct = acct;
     }
@@ -1042,7 +1042,7 @@ class BankingButton extends Button {
 class BankingButtonTitleFetcher {
     constructor(acct) { this.acct = acct; }
     get_title() {
-        let title = "Bank: $"+currency(this.acct.balance)+".";
+        let title = "Bank: $"+currency(this.acct.balance);
         if (this.acct.loan != null)
             title += "\nDue: $"+this.acct.loan.payoff+" in "+dur_string(this.acct.loan.due-now());
         return title;
@@ -1195,7 +1195,7 @@ class LiveStatus extends Drawable {
         this.acct = acct;
         this.message = "Welcome, pilot.\nYour ship is ready for liftoff.";
     }
-    set_status(status) {
+    status_msg(status) {
         this.message = status;
     }
     draw(gfx) {
@@ -1586,37 +1586,38 @@ class Ship extends MassiveObject {
         this.flying = true;
         this.vel.y = config.liftoff_vel;
         this.use_fuel(config.liftoff_fuel);
-        this.set_status("Lift-off!");
+        this.status_msg("Lift-off!");
     }
-    land(terrain) {
+    land(terrain, frac_fatal) {
         this.flying = false;
         this.bot_thrust = this.side_thrust = 0;
         this.stop();
         this.loc.y = terrain.elevation(this.loc.x);
-        this.set_status("Landed safely.");
+        ///this.status_msg("Landed safely.");
+        this.status_msg("Landed at "+Math.floor(frac_fatal*100).toString()+"% of fatal speed.");
     }
     enter_port(port) {
         this.inport = port;
-        this.set_status("In port "+port.name+".");
+        this.status_msg("In port "+port.name+".");
     }
     exit_port() {
-        this.set_status("Left port "+this.inport.name+".");
+        this.status_msg("Left port "+this.inport.name+".");
         this.inport = null;
     }
     prospect(deposits) {
         const deposit = deposits.closest(this.loc.x);
         if (deposit == null || Math.abs(deposit.xpos - this.loc.x) > config.deposit_dig_max_dist) {
-            this.set_status("No ore deposits found here.");
+            this.status_msg("No ore deposits found here.");
             return 0;
         }
         const loaded = this.load_ore(deposit.mass);
         deposit.mass -= loaded;
         if (deposit.mass == 0)
-            this.set_status("Loaded "+loaded.toString()+" tons of ore!");
+            this.status_msg("Loaded "+loaded.toString()+" tons of ore!");
         else if (loaded == 0)
-            this.set_status("Ship is full; cannot load any more ore.");
+            this.status_msg("Ship is full; cannot load any more ore.");
         else
-            this.set_status("Loaded "+loaded.toString()+" tons of ore. Leaving "+deposit.mass.toString()+" tons because ship is full.");
+            this.status_msg("Loaded "+loaded.toString()+" tons of ore. Leaving "+deposit.mass.toString()+" tons because ship is full.");
         return loaded;
     }
     update(time) {
@@ -1627,8 +1628,8 @@ class Ship extends MassiveObject {
         if (this.flying)
             this.accelerate(this.side_thrust, this.bot_thrust - config.gravity);
     }
-    set_status(msg) {
-        _game.set_status(msg); // FIXME
+    status_msg(msg) {
+        _game.status_msg(msg); // FIXME
     }
     draw(gfx, xpos, boty) {
         const x = this.x + this.loc.x - xpos;
@@ -1744,8 +1745,8 @@ class Dash extends Form {
         this.layout.add(2, 3, this.add(new DashClock(0,0,0,0)));
         this.need_layout = true;
     }
-    set_status(status) {
-        ///this.live_status.set_status(status);
+    status_msg(status) {
+        this.live_status.status_msg(status);
     }
     draw(gfx) {
         if (this.need_layout) {
@@ -1820,7 +1821,8 @@ this.dash.port_map.install(this.ship, this.ports); // PortMap
             if (ship.vel.norm2() > config.crash_vel2) {
                 this.game_over("You crashed!");
             } else {
-                ship.land(this.terrain);
+                const frac_fatal = Math.sqrt(ship.vel.norm2() / config.crash_vel2);
+                ship.land(this.terrain, frac_fatal);
             }
         }
         this.draw();
@@ -1841,8 +1843,8 @@ this.dash.port_map.install(this.ship, this.ports); // PortMap
             }
         }
     }
-    set_status(status) {
-        this.dash.set_status(status);
+    status_msg(status) {
+        this.dash.status_msg(status);
     }
     draw() {
         const sxpos = this.ship.loc.x - this.terrain.w;
