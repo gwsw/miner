@@ -546,9 +546,18 @@ class Form extends Drawable {
     }
     add(child) {
         this.children.push(child);
+        this.update_form();
         return child;
     }
     update_form() {
+        let ymax = 0;
+        for (let child of this.children) {
+            const y = child.y + child.h;
+            if (y > ymax) ymax = y;
+        }
+        if (ymax > this.y + this.h) {
+            this.h = ymax - this.y;
+        }
     }
     mouse(down, x, y) {
         for (const child of this.children) {
@@ -683,8 +692,10 @@ class NumberInput extends Form {
 class Menu extends Form {
     constructor(x, y, w, h, desc) {
         super(x, y, w, h, config.color_menu_bg);
+        const xmargin = Math.floor(w * .02);
+        const ymargin = Math.floor(xmargin / 2);
         ///this.layout = new Layout(x, y, w, h, this, 0, [], 1, w, h*.01, 0);
-        this.desc_box = new TextBox(x, y, w, h, desc, null, config.color_menu_fg);
+        this.desc_box = new TextBox(x+xmargin, y+ymargin, w-2*xmargin, h-2*ymargin, desc, null, config.color_menu_fg);
         this.set_desc(desc);
     }
     set_desc(desc) {
@@ -695,7 +706,7 @@ class Menu extends Form {
         this.btn_h = Math.floor(this.h * 0.10);
         this.btn_sp = Math.floor(this.btn_h * .3);
         this.btn_x = this.x + (this.w - this.btn_w) / 2;
-        this.btn_y = this.y + this.btn_h*3.5;
+        this.btn_y = this.y + this.btn_h*1.5;
     }
     draw(gfx) {
         super.draw(gfx);
@@ -794,6 +805,23 @@ class OkBuyFuelMenuButton extends MenuButton {
 }; // class OkBuyFuelMenuButton 
 
 // --------------------------------------------------------------------
+class OkFillUpMenuButton extends MenuButton {
+    constructor(menu, slot) {
+        super(menu, "Fill it up", slot);
+        this.menu = menu;
+        this.menurect = { x:menu.x, y:menu.y, w:menu.w, h:menu.h }; 
+    }
+    click_menu_button(slot) {
+        if (_game == null || _game.ship == null) return;
+        const ship = _game.ship;
+        const menu = new ConfirmBuyFuelMenu(this.menurect.x,  this.menurect.y,  this.menurect.w,  this.menurect.h, 
+            _game.ship, _game.acct, Math.floor(ship.max_fuel-ship.fuel), this.menu.price);
+        _game.pop_form();
+        _game.forms.push(menu.init());
+    }
+}; // class OkFillUpMenuButton 
+
+// --------------------------------------------------------------------
 class BuyFuelMenu extends Menu {
     constructor(x, y, w, h, ship, acct, price) {
         super(x, y, w, h, "How much fuel do you want to buy for $"+price.toString()+" per liter?");
@@ -812,7 +840,8 @@ class BuyFuelMenu extends Menu {
         this.add(this.fuel_input);
         this.btn_y += fi_h + .75*this.btn_h;
         this.add(new OkBuyFuelMenuButton(this, 0));
-        this.add(new NoMenuButton(this, "Cancel", 1));
+        this.add(new OkFillUpMenuButton(this, 1));
+        this.add(new NoMenuButton(this, "Cancel", 2));
         return this;
     }
 }; // class BuyFuelMenu
@@ -954,6 +983,7 @@ class PortMenu extends Menu {
         return this;
     }
     update_form() {
+        super.update_form();
         this.set_desc(this.get_desc());
     }
     get_desc() {
