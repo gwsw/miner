@@ -635,7 +635,7 @@ class NumberInputDigit extends Drawable {
             this.digit_char_x, this.digit_char_y, this.digit_char_w, this.digit_char_h,
             config.color_btn_dir, true);
     }
-}; // class NumberInputButton
+}; // class NumberInputDigit
 
 // --------------------------------------------------------------------
 class NumberInput extends Form {
@@ -658,6 +658,7 @@ class NumberInput extends Form {
         if (r) {
             if (this.get_value() > this.max)
                 this.set_value(this.max);
+                this.updated();
         }
         return r;
     }
@@ -673,6 +674,8 @@ class NumberInput extends Form {
             this.digits[i].set_value(v % 10);
             v = Math.floor(v/10);
         }
+    }
+    updated() {
     }
 }; // class NumberInput
 
@@ -1594,6 +1597,7 @@ class Ship extends MassiveObject {
         }
     }
     set_bot_thrust(on, supercharge = false) {
+        if (this.inport) return;
         if (!this.flying && on) this.liftoff();
         this.bot_thrust = supercharge ? config.ship_bot_thrust*3 : on ? config.ship_bot_thrust : 0;
     }
