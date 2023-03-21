@@ -396,7 +396,7 @@ class TextBox extends Drawable {
         this.text = text;
     }
     measure(gfx) {
-        return gfx.draw_paragraph(msg, this.x, this.y, this.w, new Color("000000"), false, "", true);
+        return gfx.draw_paragraph(this.text, this.x, this.y, this.w, null, false, "", true);
     }
     draw(gfx) {
         if (this.bg != null) gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
@@ -651,7 +651,15 @@ class NumberInput extends Form {
     constructor(x, y, w, h, num_digits, max) {
         super(x, y, w, h, config.color_numin_bg);
         const digit_sp = 0.2;
-        const digit_w = w / (num_digits + digit_sp * (num_digits-1));
+        const digit_count = num_digits + digit_sp * (num_digits-1);
+        let btn_h = h / 3;
+        let digit_w = w / digit_count;
+        if (digit_w > btn_h) {
+            digit_w = btn_h;
+            const nw = digit_w * digit_count;
+            x += (w - nw) / 2;
+            w = nw;
+        }
         this.digits = [];
         this.max = max;
         let dx = x + w - digit_w;
@@ -699,8 +707,8 @@ class Menu extends Form {
         this.set_desc(desc);
     }
     set_desc(desc) {
-        this.desc_box.set_text(desc);
         this.desc = desc;
+        this.desc_box.set_text(desc);
         ///FIXME
         this.btn_w = Math.floor(this.w * 0.6);
         this.btn_h = Math.floor(this.h * 0.10);
