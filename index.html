@@ -70,14 +70,16 @@ var config = {
     color_clock_border     : "000000",
     color_clock_fg         : "000000",
     color_dash_bg          : "bec2cb",
+    color_debugrid         : "f0f0e0",
     color_fuel             : "40a0f0",
     color_gauge_bg         : "e0e0e0",
     color_gauge_border     : "a098b0",
     color_gauge_crit       : "ff1010",
     color_gauge_low        : "a06000",
+    color_gauge_max_fg     : "909090",
     color_gauge_text       : "000000",
     color_gauge_title      : "000000",
-    color_debugrid         : "f0f0e0",
+    color_grid             : "c0c0c0",
     color_msg_bg           : "c0c0c0",
     color_msg_fg           : "000000",
     color_msg_border       : "ff0000",
@@ -248,7 +250,7 @@ class Graphics {
             }
         }
     }
-    draw_paragraph(msg, x, y, w, color, center = false, list_char = "", dryrun = false) {
+    draw_paragraph(msg, x, y, w, color, center = false, list_char = "") {
         const lines = this.split_text(msg, w);
         const line_h = this.font_height;
         const list_indent = (list_char.length == 0) ? 0 : this.measure_text(list_char).width;
@@ -266,7 +268,7 @@ class Graphics {
             }
             if (list_char.length > 0 && line.substr(0,list_char.length) != list_char)
                 tx += list_indent;
-            if (!dryrun) this.draw_text(tx, y, line, color);
+            if (color != null) this.draw_text(tx, y, line, color);
             y += line_h;
         }
         return { w: w, h: lines.length * line_h };
@@ -396,7 +398,7 @@ class TextBox extends Drawable {
         this.text = text;
     }
     measure(gfx) {
-        return gfx.draw_paragraph(this.text, this.x, this.y, this.w, null, false, "", true);
+        return gfx.draw_paragraph(this.text, this.x, this.y, this.w, null);
     }
     draw(gfx) {
         if (this.bg != null) gfx.draw_rect(this.x, this.y, this.w, this.h, this.bg);
@@ -451,6 +453,9 @@ class Gauge extends Drawable {
         }
         if (ctext != null)
             gfx.draw_centered_text(this.x, this.y+this.h/2-value_text_size.height/2, this.w, ctext, ccolor);
+        let mtext = null;
+        mtext = Math.floor(this.max_value).toString();
+        gfx.draw_centered_text(this.x, bot-gh, this.w, mtext, config.color_gauge_max_fg);
     }
 }; // class Gauge
 
@@ -518,7 +523,7 @@ class Button extends Drawable {
     click_up() {
     }
     measure(gfx) {
-        const text_size = gfx.draw_paragraph(this.get_title(), this.x, this.y, this.w, new Color("000000"), true, "", true);
+        const text_size = gfx.draw_paragraph(this.get_title(), this.x, this.y, this.w, null, true);
         text_size.w += 2 * this.xmargin;
         text_size.h += 2 * this.ymargin;
         return text_size;
@@ -1260,7 +1265,7 @@ class LiveStatus extends Drawable {
         let w = this.w - 2*config.gauge_border;
         for (let i = this.messages.length; i > 0; --i) {
             const msg = this.messages[i-1];
-            const size = gfx.draw_paragraph(msg, 0, 0, w, config.color_status_fg, false, "", true);
+            const size = gfx.draw_paragraph(msg, 0, 0, w, null);
             y -= size.h;
             if (y < this.y) break;
             gfx.draw_paragraph(msg, this.x + xindent, y, w, config.color_status_fg);
@@ -1505,7 +1510,6 @@ class LiveView extends Drawable {
         this.draw_grid(gfx, 1, boty);
     }
     draw_grid(gfx, left, boty) {
-        const grid_color = config.color_sky.opposite();
         for (let yy = 0; ; yy += config.grid_step) {
             const y = this.h + boty - yy - config.grid_thick;
             if (y < 0) break;
@@ -1513,8 +1517,8 @@ class LiveView extends Drawable {
             const label_size = gfx.measure_text(label);
             const tick_x = left ? this.x : this.x + this.w - config.grid_len;
             const label_x = left ? tick_x + config.grid_len : tick_x - label_size.width;
-            gfx.draw_rect(tick_x, y, config.grid_len, config.grid_thick, grid_color);
-            gfx.draw_text(label_x, y-label_size.height/2, label, grid_color);
+            gfx.draw_rect(tick_x, y, config.grid_len, config.grid_thick, config.color_grid);
+            gfx.draw_text(label_x, y-label_size.height/2, label, config.color_grid);
         }
     }
 }; // class LiveView
