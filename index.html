@@ -76,7 +76,7 @@ var config = {
     color_gauge_border     : "a098b0",
     color_gauge_crit       : "ff1010",
     color_gauge_low        : "a06000",
-    color_gauge_max_fg     : "909090",
+    color_gauge_max_fg     : "808080",
     color_gauge_text       : "000000",
     color_gauge_title      : "000000",
     color_grid             : "c0c0c0",
@@ -420,7 +420,7 @@ class Gauge extends Drawable {
     }
     set_value(value) {
         if (value < 0) value = 0;
-        if (value > this.max_value) value = this.max_value;
+        ///if (value > this.max_value) value = this.max_value;
         this.value = value;
     }
     get_value(value) {
@@ -434,7 +434,8 @@ class Gauge extends Drawable {
         const gb = config.gauge_border;
         const inh = gh - 2*gb;
         const inw = this.w - 2*gb;
-        const barh = inh * this.value / this.max_value;
+        const bar_value = (this.value > this.max_value) ? this.max_value : this.value;
+        const barh = inh * bar_value / this.max_value;
         const bot = this.y + this.h;
         const value_text = Math.floor(this.value).toString();
         const value_text_size = gfx.measure_text(value_text);
@@ -1246,16 +1247,24 @@ class LiveStatus extends Drawable {
     constructor(x, y, w, h, acct) {
         super(x, y, w, h);
         this.acct = acct;
+        this.clr_next = false;
         this.messages = [];
         ///this.max_messages = 3;
         this.status_msg("Welcome, pilot.\nYour ship is ready for liftoff.");
     }
     status_msg(status) {
+        if (this.clr_next) {
+            this.clr_next = false;
+            this.clear();
+        }
         this.messages.push(status);
         ///while (this.messages.length > this.max_messages) this.messages.unshift();
     }
     clear() {
         this.messages.splice(0);
+    }
+    clear_next() {
+        this.clr_next = true;
     }
     draw(gfx) {
         if (this.w == 0 || this.h == 0) return;
@@ -1814,7 +1823,7 @@ class Dash extends Form {
         this.live_status.status_msg(status);
     }
     begin_cmd() {
-        ///this.live_status.clear();
+        this.live_status.clear_next();
     }
     end_cmd() {
     }
